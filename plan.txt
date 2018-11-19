@@ -1,0 +1,5 @@
+1. Our job is to implement a basic chat client that can handle up to 255 clients and observers at any time. Our program must be able to handle several different events at any time, such as people joining and leaving, as well as sending public or private messages to other participants. We must use a polling function to keep track of the various client sockets activity and respond to changes accordingly.  
+
+2. We think the most challenging part of this assignment will be handling public and private messages. There are a lot of different rules that must be implemented depending on the message type. Creating an effective protocol to handle these will be very complex. We also expect that random joins and exits to be complicated to handle.
+
+3. We plan to use the Man pages via our terminal, lecture materials and the book, as well as asking other classmates or Dr. Tsikerdekis when we get really stuck.
