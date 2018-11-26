@@ -1,36 +1,18 @@
-/* CSCI 367 Lexithesaurus: prog2_client.c
+/* CSCI 367 LogosNet: prog3_participant.c
 *
-* 31 OCT 2018, Zach Richardson and Mitch Kimball
+* 26 NOV 2018, Zach Richardson and Mitch Kimball
 */
 
 #include <errno.h>
-#include<netdb.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#define MAXWORDSIZE 255
+#define MAXMSGSIZE 1000
 #define TRUE 1
 #define FALSE 0
-
-/*------------------------------------------------------------------------
-* Program: demo_client
-*
-* Purpose: allocate a socket, connect to a server, and
-
-*------------------------------------------------------------------------
-* Program: demo_client
-*
-* Purpose: allocate a socket, connect to a server, and print all output
-*
-* Syntax: ./demo_client server_address server_port
-*
-* server_address - name of a computer on which server is executing
-* server_port    - protocol port number server is using
-*
-*------------------------------------------------------------------------
-*/
 
 //sends data from buf of size len to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
@@ -243,9 +225,6 @@ int main( int argc, char **argv) {
   char *host; /* pointer to host name */
   int n; /* number of characters read */
   char buf[1000]; /* buffer for data from the server */
-  uint8_t boardSize;
-  uint8_t turnTime;
-  char playerNum;
   memset((char *)&sad,0,sizeof(sad)); /* clear sockaddr structure */
   sad.sin_family = AF_INET; /* set family to Internet */
 
@@ -293,6 +272,8 @@ int main( int argc, char **argv) {
     fprintf(stderr,"connect failed\n");
     exit(EXIT_FAILURE);
   }
+
+  //TODO: fix from here forward
 
   //read the player number, print error if one occurs
   n = read(sd,&playerNum,sizeof(playerNum));
