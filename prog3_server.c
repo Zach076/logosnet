@@ -17,6 +17,8 @@
 #define NUMCLIENTS 255
 #define TRUE 1
 #define FALSE 0
+#define PARTICIPANT 1
+#define OBSERVER 0
 int pvisits = 0; /* counts participant's connections */
 int ovisits = 0; /* counts observers's connections */
 int sdp[255]; /* socket descriptors for participants */
@@ -26,18 +28,20 @@ int lsdo; //listening socket descriptor for observers
 
 //TODO: add a flag to determine which type of client this sd is
 struct node{
-    int socketDes;
-    struct node *nextnode;
+  int socketDes;
+  struct node *nextnode;
 };
 
 struct queue{
-    struct node *first;
-    struct node *last;
+  struct node *first;
+  struct node *last;
 }requestqueue;
 
 //sends data from buf of size len to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
 void betterSend(int sd, void* buf, size_t len) {
+
+  //TODO:send length then message
   ssize_t n = -1;
   //while errors occur
   while(n == -1) {
@@ -45,7 +49,20 @@ void betterSend(int sd, void* buf, size_t len) {
     n = send(sd, buf, len, 0);
     //if error occured
     if(n == -1) {
-      //if error is not fixable, disconnect both clents, and exit
+      //if error is not fixable, disconnect and exit
+      if(errno != ENOBUFS && errno != ENOMEM) {
+        close(sd);
+        exit(EXIT_FAILURE);
+      }
+    }
+  }
+
+  while(n == -1) {
+    //try to send data
+    n = send(sd, buf, len, 0);
+    //if error occured
+    if(n == -1) {
+      //if error is not fixable, disconnect and exit
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
         exit(EXIT_FAILURE);
@@ -57,6 +74,7 @@ void betterSend(int sd, void* buf, size_t len) {
 //recieves data drom a send, storing the data of length len to buf
 //prints error if recieve fails
 void recieve(int sd, void* buf, size_t len, char* error) {
+  //TODO: recieve length then message
   ssize_t n;
   //recieve data
   n = recv(sd, buf, len, MSG_WAITALL);
@@ -69,25 +87,30 @@ void recieve(int sd, void* buf, size_t len, char* error) {
 }
 
 
-void acceptHandler(int lsd, struct sockaddr_in cad) {
-  //TODO: fix alen error
+void acceptHandler(int lsd, struct sockaddr_in cad, int type) {
   int alen = sizeof(cad);
   int index = -1;
   // loop to find empty index in participants array
   for(int i = 0; i <= NUMCLIENTS; i++) {
     //if we found an empty space
-    if (sdp[i] < 0) {
+    if (type && sdp[i] < 0) {
+      //set index and leave loop
+      index = i;
+      i = NUMCLIENTS;
+    } else if(!type && sdo[i]){
       //set index and leave loop
       index = i;
       i = NUMCLIENTS;
     }
   }
 
-  //TODO: can't just exit if fails
   if(index >= 0) {
-    if ((sdp[index] = accept(lsd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
+    if (type && (sdp[index] = accept(lsd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
       fprintf(stderr, "Error: Accept failed\n");
       sdp[index] =-1;
+    } else if (!type && (sdo[index] = accept(lsd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
+      fprintf(stderr, "Error: Accept failed\n");
+      sdo[index] =-1;
     }
   }
 }
@@ -97,7 +120,7 @@ void enqueue(struct node* newnode){
     requestqueue.first = newnode;
     requestqueue.last = newnode;
   }
-    //else place after last item in queue
+  //else place after last item in queue
   else{
     requestqueue.last->nextnode = newnode;
     requestqueue.last = newnode;
@@ -114,7 +137,7 @@ struct node* dequeue(){
     requestqueue.first = NULL;
     requestqueue.last = NULL;
   }
-    //else just move the front pointer to the next node
+  //else just move the front pointer to the next node
   else{
     requestqueue.first = requestqueue.first->nextnode;
   }
@@ -126,13 +149,13 @@ struct node* dequeue(){
 void findReadySockets(fd_set set, int n){
 
   /*go through set
-   * for each item in set
-   * check if is_set
-   *  add to queue
-   * else
-   *  move to next item
-   *
-   * */
+  * for each item in set
+  * check if is_set
+  *  add to queue
+  * else
+  *  move to next item
+  *
+  * */
   int i;
   int numfound = 0;
 
@@ -326,7 +349,7 @@ int main(int argc, char **argv) {
   /* Main server loop - accept and handle requests */
   while (1) {
 
-    fprintf(stderr,"SELECT\n");
+    fprintf(stderr,"SELECT, LSDP:%d LSDO:%d\n", lsdp, lsdo);
     n =  select(maxSD+1,&set,NULL,NULL,NULL); //is there anything to read in time
 
     //iterate and find n sd's put in queue grab from queue
@@ -336,44 +359,27 @@ int main(int argc, char **argv) {
     //loop until queue is empty
     while((temp = dequeue()) != NULL) {
 
-        visits++;
-        fprintf(stderr,"VISIT number:%d\n", visits );
+      visits++;
+      fprintf(stderr,"VISIT number:%d\n", visits );
 
-        int activeSd = temp->socketDes;
-        fprintf(stderr,"Active SD:%d\n", activeSd );
-        fprintf(stderr,"LSDO:%d\n", lsdo);
-        //if the current sd is the participants listening one, negotiate a new connection
-        if (activeSd == lsdp) {
-            acceptHandler(lsdp,cad);
-        }
-            //if the current sd is the observers listening one, negotiate a new connection
-        else if (activeSd == lsdo) {
-          fprintf(stderr,"I'm in.\n");
-          acceptHandler(lsdo, cad);
-        }
+      int activeSd = temp->socketDes;
+      fprintf(stderr,"Active SD:%d\n", activeSd );
+      //if the current sd is the participants listening one, negotiate a new connection
+      if (activeSd == lsdp) {
+        fprintf(stderr,"lsdp\n");
+        acceptHandler(lsdp,cad, PARTICIPANT);
+      }
+      //if the current sd is the observers listening one, negotiate a new connection
+      else if (activeSd == lsdo) {
+        fprintf(stderr,"lsdo\n");
+        acceptHandler(lsdo, cad, OBSERVER);
+      }
 
-        else{
-            //message logic
-            //handle disconnects
-        }
+      else{
+        //message logic
+        //handle disconnects
+      }
     }
-/* cases must be constants
-    switch (activeSd) {
-      case lsdp:
-
-        alen = sizeof(cad);
-        if ((sd2 = accept(sd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
-          fprintf(stderr, "Error: Accept failed\n");
-          exit(EXIT_FAILURE);
-        }
-
-        break;
-      case lsdo:
-
-        break;
-      default:
-          //handle chat messages and disconnects
-    }*/
 
   }
   //at end of game close the socket and exit
