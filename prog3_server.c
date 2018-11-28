@@ -89,10 +89,7 @@ void acceptHandler(int lsd, struct sockaddr_in cad) {
       fprintf(stderr, "Error: Accept failed\n");
       sdp[index] =-1;
     }
-
-
   }
-
 }
 
 void enqueue(struct node* newnode){
@@ -318,12 +315,18 @@ int main(int argc, char **argv) {
   FD_ZERO(&set);
   FD_SET(lsdp,&set);
   FD_SET(lsdo,&set);
-  //TODO: get max
-  int maxSD = lsdp;
+  int maxSD = 0;
+  if(lsdp > lsdo) {
+    maxSD = lsdp;
+  } else {
+    maxSD = lsdo;
+  }
 
+  int visits = 0;
   /* Main server loop - accept and handle requests */
   while (1) {
 
+    fprintf(stderr,"SELECT\n");
     n =  select(maxSD+1,&set,NULL,NULL,NULL); //is there anything to read in time
 
     //iterate and find n sd's put in queue grab from queue
@@ -333,14 +336,20 @@ int main(int argc, char **argv) {
     //loop until queue is empty
     while((temp = dequeue()) != NULL) {
 
+        visits++;
+        fprintf(stderr,"VISIT number:%d\n", visits );
+
         int activeSd = temp->socketDes;
+        fprintf(stderr,"Active SD:%d\n", activeSd );
+        fprintf(stderr,"LSDO:%d\n", lsdo);
         //if the current sd is the participants listening one, negotiate a new connection
         if (activeSd == lsdp) {
-            //accepthandler(lsdp,)
+            acceptHandler(lsdp,cad);
         }
             //if the current sd is the observers listening one, negotiate a new connection
         else if (activeSd == lsdo) {
-            //accepthandler(lsdo, )
+          fprintf(stderr,"I'm in.\n");
+          acceptHandler(lsdo, cad);
         }
 
         else{
