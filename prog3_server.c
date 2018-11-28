@@ -17,7 +17,23 @@
 #define NUMCLIENTS 255
 #define TRUE 1
 #define FALSE 0
-int visits = 0; /* counts client connections */
+int pvisits = 0; /* counts participant's connections */
+int ovisits = 0; /* counts observers's connections */
+int sdp[255]; /* socket descriptors for participants */
+int sdo[255]; /* socket descriptors for observers */
+int lsdp; //listening socket descriptor for participants
+int lsdo; //listening socket descriptor for observers
+
+//TODO: add a flag to determine which type of client this sd is
+struct node{
+    int socketDes;
+    struct node *nextnode;
+};
+
+struct queue{
+    struct node *first;
+    struct node *last;
+}requestqueue;
 
 //sends data from buf of size len to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
@@ -52,15 +68,19 @@ void recieve(int sd, void* buf, size_t len, char* error) {
   }
 }
 
-void acceptHandler(int lsd, int[] sdp, int[] sdo, struct sockaddr_in cad) {
+
+void acceptHandler(int lsd, struct sockaddr_in cad) {
+  //TODO: fix alen error
   alen = sizeof(cad);
   int index = -1;
   for(int i = 0; i <= NUMCLIENTS; i++) {
     if (sdp[i] < 0) {
-      index = i
+      index = i;
       i = NUMCLIENTS;
     }
   }
+
+  //TODO: can't just exit if fails
   if(index >= 0) {
     if ((sdp[index] = accept(lsd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
       fprintf(stderr, "Error: Accept failed\n");
@@ -70,16 +90,96 @@ void acceptHandler(int lsd, int[] sdp, int[] sdo, struct sockaddr_in cad) {
 
 }
 
+void enqueue(struct node* newnode){
+  if(requestqueue.first == NULL && requestqueue.last ==NULL){
+    requestqueue.first = newnode;
+    requestqueue.last = newnode;
+  }
+    //else place after last item in queue
+  else{
+    requestqueue.last->nextnode = newnode;
+    requestqueue.last = newnode;
+  }
+}
+
+struct node* dequeue(){
+  //grab the front of the queue
+  struct node * temp = requestqueue.first;
+  //if the queue is empty return NULL
+  if(requestqueue.first ==NULL) return NULL;
+  //if there is only one node in queue
+  if(requestqueue.first ==requestqueue.last){
+    requestqueue.first = NULL;
+    requestqueue.last = NULL;
+  }
+    //else just move the front pointer to the next node
+  else{
+    requestqueue.first = requestqueue.first->nextnode;
+  }
+
+  return temp;
+
+}
+
+void findReadySockets(fd_set set, int n){
+
+  /*go through set
+   * for each item in set
+   * check if is_set
+   *  add to queue
+   * else
+   *  move to next item
+   *
+   * */
+  int i;
+  int numfound = 0;
+
+  //check if listen participant sd is ready
+  if(FD_ISSET(lsdp, &set)){
+    struct node *temp = (struct node *)malloc(sizeof(struct node));
+    temp->socketDes = lsdp;
+    enqueue(temp);
+    numfound++;
+  }
+
+  //check if listen observer sd is ready
+  if(FD_ISSET(lsdo,&set)){
+    struct node *temp = (struct node *)malloc(sizeof(struct node));
+    temp ->socketDes = lsdo;
+    enqueue(temp);
+    numfound++;
+  }
+
+  //iterate over the number of total possible clients until we find n ready socket descriptors
+  for(i = 0; numfound < n && i < NUMCLIENTS; i++ ){
+    //check each participant socket descriptor
+    if(FD_ISSET(sdp[i],&set)){
+      //create and add a new node to the request queue
+      struct node *temp = (struct node *)malloc(sizeof(struct node));
+      temp ->socketDes = sdp[i];
+      enqueue(temp);
+    }
+    //check each observer socket descriptor
+    if(FD_ISSET(sdo[i],&set)){
+      //create and add a new node to the request queue
+      struct node *temp = (struct node *)malloc(sizeof(struct node));
+      temp ->socketDes = sdo[i];
+      enqueue(temp);
+    }
+  }
+}
+
 //main function, mostly connection logic
 int main(int argc, char **argv) {
   struct protoent *ptrp; /* pointer to a protocol table entry */
   struct sockaddr_in sad; /* structure to hold server's address */
   struct sockaddr_in cad; /* structure to hold client's address */
 
-  int sdp[255]; /* socket descriptors for participants */
-  int sdo[255]; /* socket descriptors for observers */
-  int lsdp;
-  int lsdo;
+
+  //TODO: note that we can't keep an index of empty spots because one could have disconnected.
+  //int sdp[255]; /* socket descriptors for participants */
+  //int sdo[255]; /* socket descriptors for observers */
+
   int pPort; /* participant port number */
   int oPort; /* observer port number */
   int alen; /* length of address */
@@ -96,6 +196,10 @@ int main(int argc, char **argv) {
   }
 
   memset((char *)&sad,0,sizeof(sad)); /* clear sockaddr structure */
+
+  //initalize all of the socket descriptors for participants and clients
+  memset(sdp,-1,sizeof(sdp));
+  memset(sdo,-1,sizeof(sdo));
 
   //: Set socket family to AF_INET
   sad.sin_family = AF_INET;
@@ -202,23 +306,39 @@ int main(int argc, char **argv) {
 
   //TODO: fix from here forward
   fd_set set;
-  struct timeval timeout = {sec,0}; //set turn timer
+
+  //struct timeval timeout = {sec,0};
   int n; //return value, if we timed out or not
   FD_ZERO(&set);
   FD_SET(lsdp,&set);
   FD_SET(lsdo,&set);
-  //get max
+  //TODO: get max
   int maxSD = lsdp;
 
   /* Main server loop - accept and handle requests */
   while (1) {
 
     n =  select(maxSD+1,&set,NULL,NULL,NULL); //is there anything to read in time
-    //iterate and find n sd's
-    int activeSd = lsdp;
 
+    //iterate and find n sd's put in queue grab from queue
+
+    findReadySockets(set,n);
+
+    struct node *temp = dequeue();
+
+    int activeSd = temp->socketDes;
+    //if the current sd is the participants listening one, negotiate a new connection
+    if(activeSd == lsdp){
+      //accepthandler(lsdp,)
+    }
+      //if the current sd is the observers listening one, negotiate a new connection
+    else if(activeSd == lsdo){
+      //accepthandler(lsdo, )
+    }
+
+/* cases must be constants
     switch (activeSd) {
-      case activeSd = lsdp:
+      case lsdp:
 
         alen = sizeof(cad);
         if ((sd2 = accept(sd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
@@ -227,12 +347,12 @@ int main(int argc, char **argv) {
         }
 
         break;
-      case activeSd = lsdo:
+      case lsdo:
 
         break;
       default:
           //handle chat messages and disconnects
-    }
+    }*/
 
   }
   //at end of game close the socket and exit
