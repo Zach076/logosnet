@@ -71,10 +71,13 @@ void recieve(int sd, void* buf, size_t len, char* error) {
 
 void acceptHandler(int lsd, struct sockaddr_in cad) {
   //TODO: fix alen error
-  alen = sizeof(cad);
+  int alen = sizeof(cad);
   int index = -1;
+  // loop to find empty index in participants array
   for(int i = 0; i <= NUMCLIENTS; i++) {
+    //if we found an empty space
     if (sdp[i] < 0) {
+      //set index and leave loop
       index = i;
       i = NUMCLIENTS;
     }
@@ -84,8 +87,10 @@ void acceptHandler(int lsd, struct sockaddr_in cad) {
   if(index >= 0) {
     if ((sdp[index] = accept(lsd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
       fprintf(stderr, "Error: Accept failed\n");
-      exit(EXIT_FAILURE);
+      sdp[index] =-1;
     }
+
+
   }
 
 }
@@ -187,6 +192,7 @@ int main(int argc, char **argv) {
   char buf[1000]; /* buffer for string the server sends */
   pPort = atoi(argv[1]); /* convert argument to binary */
   oPort = atoi(argv[2]); /* convert argument to binary */
+  struct node *temp;
 
   if( argc != 3 ) {
     fprintf(stderr,"Error: Wrong number of arguments\n");
@@ -324,18 +330,24 @@ int main(int argc, char **argv) {
 
     findReadySockets(set,n);
 
-    struct node *temp = dequeue();
+    //loop until queue is empty
+    while((temp = dequeue()) != NULL) {
 
-    int activeSd = temp->socketDes;
-    //if the current sd is the participants listening one, negotiate a new connection
-    if(activeSd == lsdp){
-      //accepthandler(lsdp,)
-    }
-      //if the current sd is the observers listening one, negotiate a new connection
-    else if(activeSd == lsdo){
-      //accepthandler(lsdo, )
-    }
+        int activeSd = temp->socketDes;
+        //if the current sd is the participants listening one, negotiate a new connection
+        if (activeSd == lsdp) {
+            //accepthandler(lsdp,)
+        }
+            //if the current sd is the observers listening one, negotiate a new connection
+        else if (activeSd == lsdo) {
+            //accepthandler(lsdo, )
+        }
 
+        else{
+            //message logic
+            //handle disconnects
+        }
+    }
 /* cases must be constants
     switch (activeSd) {
       case lsdp:
