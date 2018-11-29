@@ -22,7 +22,9 @@
 int pvisits = 0; /* counts participant's connections */
 int ovisits = 0; /* counts observers's connections */
 int sdp[255]; /* socket descriptors for participants */
+char username[255][10] //usernames for participants
 int sdo[255]; /* socket descriptors for observers */
+int tempSD; //to send clients an 'N' if all slots are taken
 int lsdp; //listening socket descriptor for participants
 int lsdo; //listening socket descriptor for observers
 
@@ -39,20 +41,19 @@ struct queue{
 
 //sends data from buf of size len to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
-void betterSend(int sd, void* buf, size_t len) {
+void betterSend(int sd, void* buf, uint8_t len) {
 
   //TODO:send length then message
-  ssize_t n = -1;
+  uint8_t n = -1;
   //while errors occur
   while(n == -1) {
     //try to send data
-    n = send(sd, buf, len, 0);
+    n = send(sd, len, sizeof(uint8_t), 0);
     //if error occured
     if(n == -1) {
-      //if error is not fixable, disconnect and exit
+      //if error is not fixable, disconnect client
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
-        exit(EXIT_FAILURE);
       }
     }
   }
@@ -65,29 +66,85 @@ void betterSend(int sd, void* buf, size_t len) {
       //if error is not fixable, disconnect and exit
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
-        exit(EXIT_FAILURE);
       }
     }
   }
 }
 
-//recieves data drom a send, storing the data of length len to buf
-//prints error if recieve fails
-void recieve(int sd, void* buf, size_t len, char* error) {
+void recieve(int sd, void* buf, char* error) {
   //TODO: recieve length then message
   ssize_t n;
-  //recieve data
-  n = recv(sd, buf, len, MSG_WAITALL);
+  uint8_t length;
+  //recieve length
+  n = recv(sd, length, sizeof(uint8_t), MSG_WAITALL);
   //if recieved incorrectly print error, disconnect both clients, and exit
-  if (n != len) {
-    fprintf(stderr,"Read Error: %s Score not read properly from sd:%d\n", error, sd);
+  if (n != sizeof(uint8_t)) {
+    fprintf(stderr,"Read Error: %s not read properly from sd:%d\n", error, sd);
     close(sd);
-    exit(EXIT_FAILURE);
+  }
+
+  n = recv(sd, buf, length, MSG_WAITALL);
+  //if recieved incorrectly print error, disconnect both clients, and exit
+  if (n != length) {
+    fprintf(stderr,"Read Error: %s not read properly from sd:%d\n", error, sd);
+    close(sd);
   }
 }
 
+int validUsername(char* buf) {
 
-void acceptHandler(int lsd, struct sockaddr_in cad, int type) {
+  //if username is taken
+  return 0;
+  //if username is Invalid
+  return -1;
+  //if username is valid
+  return 1;
+}
+
+int timedRecieve(char* buf, uint8_t sec, int sd) {
+  fd_set set;
+  struct timeval timeout = {sec,0}; //set turn timer
+  int n; //return value, if we timed out or not
+  FD_ZERO(&set);
+  FD_SET(sd,&set);
+  n =  select(sd+1,&set,NULL,NULL,&timeout); //is there anything to read in time
+  if(n == 0){
+    //timeout
+    n = 0;
+  } else if(n == -1) {
+    //error
+    n = 0;
+  } else {
+
+    uint8_t length;
+    //recieve length
+    n = recv(sd, length, sizeof(uint8_t), MSG_WAITALL);
+    //if recieved incorrectly print error and disconnect
+    if (n != sizeof(uint8_t)) {
+      fprintf(stderr,"Read Error: %s not read properly from sd:%d\n", error, sd);
+      close(sd);
+    }
+
+    n = recv(sd, buf, length, MSG_WAITALL);
+    //if recieved incorrectly print error and disconnect
+    if (n != length) {
+      fprintf(stderr,"Read Error: %s not read properly from sd:%d\n", error, sd);
+      close(sd);
+    }
+
+    if(validUsername(buf) == 1) {
+      //valid
+    } else if(validUsername(buf) == 0) {
+      //taken, reset timer
+    } else if(validUsername(buf) == -1) {
+      //TODO:invalid, no timer reset
+    }
+
+  }
+  return n;
+}
+
+void acceptHandler(struct sockaddr_in cad, int type) {
   int alen = sizeof(cad);
   int index = -1;
   // loop to find empty index in participants array
@@ -105,12 +162,43 @@ void acceptHandler(int lsd, struct sockaddr_in cad, int type) {
   }
 
   if(index >= 0) {
-    if (type && (sdp[index] = accept(lsd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
+    //if participant
+    if(type) {
+      //if connection fails
+      if ((sdp[index] = accept(lsdp, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
+        fprintf(stderr, "Error: Accept failed\n");
+        sdp[index] =-1;
+      } else {
+        //send char 'Y' and ask for username
+      }
+    }
+    //if observer
+    else if(!type) {
+      //if connection fails
+      if ((sdo[index] = accept(lsdo, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
+        fprintf(stderr, "Error: Accept failed\n");
+        sdo[index] =-1;
+      } else {
+        //send char 'Y' and ask for username
+      }
+    }
+  }
+  //else if no vacancy and participant
+  else if(type) {
+    if ((tempSD = accept(lsdp, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
       fprintf(stderr, "Error: Accept failed\n");
-      sdp[index] =-1;
-    } else if (!type && (sdo[index] = accept(lsd, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
+      tempSD =-1;
+    } else {
+      //send char 'N'
+    }
+  }
+  //else if no vacancy and observer
+  else if(!type) {
+    if ((tempSD = accept(lsdo, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
       fprintf(stderr, "Error: Accept failed\n");
-      sdo[index] =-1;
+      tempSD =-1;
+    } else {
+      //send char 'N'
     }
   }
 }
@@ -367,12 +455,12 @@ int main(int argc, char **argv) {
       //if the current sd is the participants listening one, negotiate a new connection
       if (activeSd == lsdp) {
         fprintf(stderr,"lsdp\n");
-        acceptHandler(lsdp,cad, PARTICIPANT);
+        acceptHandler(cad, PARTICIPANT);
       }
       //if the current sd is the observers listening one, negotiate a new connection
       else if (activeSd == lsdo) {
         fprintf(stderr,"lsdo\n");
-        acceptHandler(lsdo, cad, OBSERVER);
+        acceptHandler(cad, OBSERVER);
       }
 
       else{
