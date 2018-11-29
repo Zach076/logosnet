@@ -22,7 +22,7 @@
 int pvisits = 0; /* counts participant's connections */
 int ovisits = 0; /* counts observers's connections */
 int sdp[255]; /* socket descriptors for participants */
-char username[255][10] //usernames for participants
+char username[255][10]; //usernames for participants
 int sdo[255]; /* socket descriptors for observers */
 int tempSD; //to send clients an 'N' if all slots are taken
 int lsdp; //listening socket descriptor for participants
@@ -102,6 +102,7 @@ int validUsername(char* buf) {
 }
 
 int timedRecieve(char* buf, uint8_t sec, int sd) {
+  char* error = "Username";
   fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n; //return value, if we timed out or not
@@ -116,24 +117,10 @@ int timedRecieve(char* buf, uint8_t sec, int sd) {
     n = 0;
   } else {
 
-    uint8_t length;
-    //recieve length
-    n = recv(sd, length, sizeof(uint8_t), MSG_WAITALL);
-    //if recieved incorrectly print error and disconnect
-    if (n != sizeof(uint8_t)) {
-      fprintf(stderr,"Read Error: %s not read properly from sd:%d\n", error, sd);
-      close(sd);
-    }
-
-    n = recv(sd, buf, length, MSG_WAITALL);
-    //if recieved incorrectly print error and disconnect
-    if (n != length) {
-      fprintf(stderr,"Read Error: %s not read properly from sd:%d\n", error, sd);
-      close(sd);
-    }
+    recieve(sd, buf, error);
 
     if(validUsername(buf) == 1) {
-      //valid
+      //valid, add to usernames
     } else if(validUsername(buf) == 0) {
       //taken, reset timer
     } else if(validUsername(buf) == -1) {
