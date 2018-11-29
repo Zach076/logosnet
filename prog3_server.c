@@ -101,16 +101,22 @@ int validUsername(char* buf) {
   return 1;
 }
 
-int timedRecieve(char* buf, uint8_t sec, int sd) {
+int timedRecieve(char* buf, uint8_t sec, int[] sd, int index) {
+  char taken = 'T';
+  char valid = 'Y';
+  char invalid = 'I';
   char* error = "Username";
   fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n; //return value, if we timed out or not
   FD_ZERO(&set);
-  FD_SET(sd,&set);
-  n =  select(sd+1,&set,NULL,NULL,&timeout); //is there anything to read in time
+  FD_SET(sd[index],&set);
+  n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
   if(n == 0){
     //timeout
+    //disconnect
+    close(sd[index]);
+    sd[index] = -1;
     n = 0;
   } else if(n == -1) {
     //error
@@ -121,10 +127,16 @@ int timedRecieve(char* buf, uint8_t sec, int sd) {
 
     if(validUsername(buf) == 1) {
       //valid, add to usernames
+      betterSend(sd, valid, sizeof(char));
+
     } else if(validUsername(buf) == 0) {
-      //taken, reset timer
+      //taken, reset timer and ask again
+      betterSend(sd, taken, sizeof(char));
+      timedRecieve(buf, sec, sd, index);
     } else if(validUsername(buf) == -1) {
-      //TODO:invalid, no timer reset
+      //TODO:invalid, no timer reset ask again
+      betterSend(sd, invalid, sizeof(char));
+      timedRecieve(buf, sec, sd, index);
     }
 
   }
@@ -141,7 +153,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       //set index and leave loop
       index = i;
       i = NUMCLIENTS;
-    } else if(!type && sdo[i]){
+    } else if(!type && sdo[i] < 0){
       //set index and leave loop
       index = i;
       i = NUMCLIENTS;
