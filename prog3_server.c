@@ -28,6 +28,11 @@ int tempSD; //to send clients an 'N' if all slots are taken
 int lsdp; //listening socket descriptor for participants
 int lsdo; //listening socket descriptor for observers
 
+struct userPair{
+  int participantSD;
+  int observerSD;
+} userList[255];
+
 //TODO: add a flag to determine which type of client this sd is
 struct node{
   int socketDes;
@@ -44,11 +49,43 @@ struct queue{
 void betterSend(int sd, void* buf, uint8_t len) {
 
   //TODO:send length then message
-  uint8_t n = -1;
+  size_t n = -1;
   //while errors occur
   while(n == -1) {
     //try to send data
     n = send(sd, len, sizeof(uint8_t), 0);
+    //if error occured
+    if(n == -1) {
+      //if error is not fixable, disconnect client
+      if(errno != ENOBUFS && errno != ENOMEM) {
+        close(sd);
+      }
+    }
+  }
+
+  while(n == -1) {
+    //try to send data
+    n = send(sd, buf, len, 0);
+    //if error occured
+    if(n == -1) {
+      //if error is not fixable, disconnect and exit
+      if(errno != ENOBUFS && errno != ENOMEM) {
+        close(sd);
+      }
+    }
+  }
+}
+
+void bigSend(int sd, void* buf, uint16_t len) {
+
+  //TODO:send length then message
+  size_t n = -1;
+  //while errors occur
+  while(n == -1) {
+
+    len = htons(len);
+    //try to send data
+    n = send(sd, len, sizeof(uint16_t), 0);
     //if error occured
     if(n == -1) {
       //if error is not fixable, disconnect client
@@ -92,23 +129,59 @@ void recieve(int sd, void* buf, char* error) {
 }
 
 int validUsername(char* buf) {
+  int taken = FALSE;
+  int done = FALSE;
+  int i = 0;
+  int valid = TRUE;
+  while(!done){
+    //TODO: better comments
+    if(buf[i] > 64 && buf[i] < 91) {
+      //nothing
+    } else if (buf[i] > 96 && buf[i] < 123) {
+      //nothing
+    } else if(buf[i] > 47 && buf[i] < 58) {
+      //nothing
+    } else if(buf[i] == 95) {
+      //nothing
+    } else if(buf[i] == 0) {
+      done = TRUE;
+    } else {
+      valid = FALSE;
+      done = TRUE;
+    }
+  }
 
-  //if username is taken
-  return 0;
-  //if username is Invalid
-  return -1;
-  //if username is valid
-  return 1;
+  if(valid) {
+
+    for(i = 0; i < 256; i++) {
+      if(!strcmp(buf,username[i])) {
+        taken = TRUE;
+        i = 256;
+      }
+    }
+
+    if(taken) {
+      return 0;
+    } else {
+      return 1;
+    }
+
+  } else {
+    return -1;
+  }
 }
 
-int timedRecieve(char* buf, uint8_t sec, int[] sd, int index) {
+int usernameLogic(uint8_t sec, int sd[], int index) {
+  //TODO: check username length client side
+  char buf[11];
+  memset(buf,0,sizeof(buf));
   char taken = 'T';
   char valid = 'Y';
   char invalid = 'I';
   char* error = "Username";
   fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
-  int n; //return value, if we timed out or not
+  int n = 1; //return value, if we timed out or not
   FD_ZERO(&set);
   FD_SET(sd[index],&set);
   n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
@@ -120,32 +193,84 @@ int timedRecieve(char* buf, uint8_t sec, int[] sd, int index) {
     n = 0;
   } else if(n == -1) {
     //error
+    close(sd[index]);
+    sd[index] = -1;
     n = 0;
   } else {
 
-    recieve(sd, buf, error);
+    recieve(sd[index], buf, error);
 
     if(validUsername(buf) == 1) {
-      //valid, add to usernames
-      betterSend(sd, valid, sizeof(char));
-
+      //TODO:valid, add to usernames
+      betterSend(sd[index], valid, sizeof(char));
+      username[index] = strcpy(buf);
     } else if(validUsername(buf) == 0) {
       //taken, reset timer and ask again
-      betterSend(sd, taken, sizeof(char));
-      timedRecieve(buf, sec, sd, index);
+      betterSend(sd[index], taken, sizeof(char));
+      usernameLogic(buf, sec, sd, index);
     } else if(validUsername(buf) == -1) {
       //TODO:invalid, no timer reset ask again
-      betterSend(sd, invalid, sizeof(char));
-      timedRecieve(buf, sec, sd, index);
+      betterSend(sd[index], invalid, sizeof(char));
+      usernameLogic(buf, sec, sd, index);
     }
 
   }
   return n;
 }
 
+int observerUsernameLogic(uint8_t sec, int sd[], int index) {
+  //TODO: check username length client side
+  char buf[11];
+  memset(buf,0,sizeof(buf));
+  char taken = 'T';
+  char valid = 'Y';
+  char invalid = 'I';
+  char* error = "Username";
+  fd_set set;
+  struct timeval timeout = {sec,0}; //set turn timer
+  int n = 1; //return value, if we timed out or not
+  FD_ZERO(&set);
+  FD_SET(sd[index],&set);
+  n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
+  if(n == 0){
+    //timeout
+    //disconnect the client
+    close(sd[index]);
+    sd[index] = -1;
+    n = 0;
+  } else if(n == -1) {
+    //socket error
+    close(sd[index]);
+    sd[index] = -1;
+    n = 0;
+  } else {
+    //sent user name
+    recieve(sd[index], buf, error);
+
+    n = validObserverUsername(buf);
+
+  }
+  return n;
+}
+
+int validObserverUsername(char* buf) {
+  int taken = -1;
+  int i = 0;
+
+    for(i = 0; i < 256; i++) {
+      if(!strcmp(buf,username[i])) {
+        taken = i;
+        i = 256;
+      }
+    }
+
+    return taken;
+}
+
 void acceptHandler(struct sockaddr_in cad, int type) {
   int alen = sizeof(cad);
   int index = -1;
+  int pairIndex = -1;
   // loop to find empty index in participants array
   for(int i = 0; i <= NUMCLIENTS; i++) {
     //if we found an empty space
@@ -169,6 +294,12 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         sdp[index] =-1;
       } else {
         //send char 'Y' and ask for username
+        betterSend(sdp[index], 'Y', 1);
+        if(usernameLogic(10,sdp,index)) {
+          //give pair
+          userList[index].participantSD = sdp[index];
+        }
+
       }
     }
     //if observer
@@ -179,6 +310,11 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         sdo[index] =-1;
       } else {
         //send char 'Y' and ask for username
+        //TODO: ask for username and match it.
+        betterSend(sdo[index], 'Y', 1);
+        //observer username logic.
+        pairIndex = observerUsernameLogic(10, sdo, index);
+        userList[pairIndex].observerSD = sdo[index];
       }
     }
   }
@@ -189,6 +325,8 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       tempSD =-1;
     } else {
       //send char 'N'
+      betterSend(tempSD, 'N', 1);
+      close(tempSD);
     }
   }
   //else if no vacancy and observer
@@ -198,6 +336,8 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       tempSD =-1;
     } else {
       //send char 'N'
+      betterSend(tempSD, 'N', 1);
+      close(tempSD);
     }
   }
 }
