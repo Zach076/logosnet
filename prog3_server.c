@@ -53,7 +53,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
   //while errors occur
   while(n == -1) {
     //try to send data
-    n = send(sd, len, sizeof(uint8_t), 0);
+    n = send(sd, &len, sizeof(uint8_t), 0);
     //if error occured
     if(n == -1) {
       //if error is not fixable, disconnect client
@@ -85,7 +85,7 @@ void bigSend(int sd, void* buf, uint16_t len) {
 
     len = htons(len);
     //try to send data
-    n = send(sd, len, sizeof(uint16_t), 0);
+    n = send(sd, &len, sizeof(uint16_t), 0);
     //if error occured
     if(n == -1) {
       //if error is not fixable, disconnect client
@@ -113,18 +113,20 @@ void recieve(int sd, void* buf, char* error) {
   ssize_t n;
   uint8_t length;
   //recieve length
-  n = recv(sd, length, sizeof(uint8_t), MSG_WAITALL);
+  n = recv(sd, &length, sizeof(uint8_t), MSG_WAITALL);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint8_t)) {
-    fprintf(stderr,"Read Error: %s not read properly from sd:%d\n", error, sd);
+    fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
     close(sd);
+    sd = -1;
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
-    fprintf(stderr,"Read Error: %s not read properly from sd:%d\n", error, sd);
+    fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
     close(sd);
+    sd = -1;
   }
 }
 
@@ -182,7 +184,6 @@ int usernameLogic(uint8_t sec, int sd[], int index) {
   fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n = 1; //return value, if we timed out or not
-  //TODO: can't use select
   FD_ZERO(&set);
   FD_SET(sd[index],&set);
   n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
@@ -203,23 +204,36 @@ int usernameLogic(uint8_t sec, int sd[], int index) {
 
     if(validUsername(buf) == 1) {
       //TODO:valid, add to usernames
-      betterSend(sd[index], valid, sizeof(char));
-      //TODO: fix line
-      //username[index] = strcpy(buf);
+      betterSend(sd[index], &valid, sizeof(char));
+      //TODO check if strcpy works
+      //username[index] = buf;
+      strcpy(username[index],buf);
     } else if(validUsername(buf) == 0) {
       //taken, reset timer and ask again
-      betterSend(sd[index], taken, sizeof(char));
-      //TODO: fix line
-      //usernameLogic(buf, sec, sd, index);
+      betterSend(sd[index], &taken, sizeof(char));
+      usernameLogic(sec, sd, index);
     } else if(validUsername(buf) == -1) {
       //TODO:invalid, no timer reset ask again
-      betterSend(sd[index], invalid, sizeof(char));
-      //TODO: fix line
-      //usernameLogic(buf, sec, sd, index);
+      betterSend(sd[index], &invalid, sizeof(char));
+      usernameLogic(sec, sd, index);
     }
 
   }
   return n;
+}
+
+int validObserverUsername(char* buf) {
+  int taken = -1;
+  int i = 0;
+
+  for(i = 0; i < 256; i++) {
+    if(!strcmp(buf,username[i])) {
+      taken = i;
+      i = 256;
+    }
+  }
+
+  return taken;
 }
 
 int observerUsernameLogic(uint8_t sec, int sd[], int index) {
@@ -228,13 +242,11 @@ int observerUsernameLogic(uint8_t sec, int sd[], int index) {
   memset(buf,0,sizeof(buf));
   char taken = 'T';
   char valid = 'Y';
-  char invalid = 'I';
+  char invalid = 'N';
   char* error = "Username";
   fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n = 1; //return value, if we timed out or not
-
-  //TODO: can't use select
   FD_ZERO(&set);
   FD_SET(sd[index],&set);
   n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
@@ -254,29 +266,26 @@ int observerUsernameLogic(uint8_t sec, int sd[], int index) {
     recieve(sd[index], buf, error);
 
     n = validObserverUsername(buf);
-
+    if(n == -1) {
+      //disconnect
+      betterSend(sd[index], &invalid, sizeof(char));
+      close(sd[index]);
+    } else if(userList[n].observerSD >0) {
+      betterSend(sd[index], &taken, sizeof(char));
+      usernameLogic(sec, sd, index);
+    } else {
+      betterSend(sd[index], &valid, sizeof(char));
+      userList[n].observerSD = sdo[index];
+    }
   }
   return n;
 }
 
-int validObserverUsername(char* buf) {
-  int taken = -1;
-  int i = 0;
-
-    for(i = 0; i < 256; i++) {
-      if(!strcmp(buf,username[i])) {
-        taken = i;
-        i = 256;
-      }
-    }
-
-    return taken;
-}
-
 void acceptHandler(struct sockaddr_in cad, int type) {
+  char valid = 'Y';
+  char invalid = 'N';
   int alen = sizeof(cad);
   int index = -1;
-  int pairIndex = -1;
   // loop to find empty index in participants array
   for(int i = 0; i <= NUMCLIENTS; i++) {
     //if we found an empty space
@@ -290,22 +299,26 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       i = NUMCLIENTS;
     }
   }
-  //if we found an empty space
+
   if(index >= 0) {
     //if participant
     if(type) {
-      //accept participant
+      //if connection fails
       if ((sdp[index] = accept(lsdp, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
         fprintf(stderr, "Error: Accept failed\n");
         sdp[index] =-1;
       } else {
+        //TODO remove
+        fprintf(stderr, "This should print in acceptHandler: part 1\n");
         //send char 'Y' and ask for username
-        //betterSend(sdp[index], 'Y', 1); TODO uncomment this
-         //TODO: uncomment this and test
-        //if(usernameLogic(10,sdp,index)) {
+        betterSend(sdp[index], &valid, 1);
+        if(usernameLogic(10,sdp,index)) {
+          //TODO remove
+          fprintf(stderr, "This should print in acceptHandler: part 2 electric boogaloo\n");
+
           //give pair
-          //userList[index].participantSD = sdp[index];
-        //}
+          userList[index].participantSD = sdp[index];
+        }
 
       }
     }
@@ -317,12 +330,11 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         sdo[index] =-1;
       } else {
         //send char 'Y' and ask for username
-        //TODO: uncomment
-        //betterSend(sdo[index], 'Y', 1);
-
-        //TODO: uncomment observer username logic.
-        //pairIndex = observerUsernameLogic(10, sdo, index);
-        //userList[pairIndex].observerSD = sdo[index];
+        //TODO: ask for username and match it.
+        //TODO:what if participant already has an observer?
+        betterSend(sdo[index], &valid, 1);
+        //observer username logic.
+        observerUsernameLogic(10, sdo, index);
       }
     }
   }
@@ -333,7 +345,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       tempSD =-1;
     } else {
       //send char 'N'
-      //betterSend(tempSD, 'N', 1); TODO: uncomment and test
+      betterSend(tempSD, &invalid, 1);
       close(tempSD);
     }
   }
@@ -344,7 +356,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       tempSD =-1;
     } else {
       //send char 'N'
-      //betterSend(tempSD, 'N', 1); TODO: uncomment and test
+      betterSend(tempSD, &invalid, 1);
       close(tempSD);
     }
   }
@@ -427,6 +439,36 @@ void findReadySockets(fd_set set, int n){
       enqueue(temp);
     }
   }
+}
+
+int makeSet(fd_set set) {
+  int i;
+  int maxSD = 0;
+  FD_ZERO(&set);
+  FD_SET(lsdp,&set);
+  FD_SET(lsdo,&set);
+  for(i = 0; i < 256; i++) {
+    if(sdp[i] > 0) {
+      FD_SET(sdp[i],&set);
+      if(sdp[i] > maxSD) {
+        maxSD = sdp[i];
+      }
+    }
+    if(sdo[i] > 0) {
+      FD_SET(sdo[i],&set);
+      if(sdo[i] > maxSD) {
+        maxSD = sdo[i];
+      }
+    }
+  }
+  if(lsdp > maxSD) {
+    maxSD = lsdp;
+  }
+  if(lsdo > maxSD) {
+    maxSD = lsdo;
+  }
+
+  return maxSD;
 }
 
 //main function, mostly connection logic
@@ -570,22 +612,14 @@ int main(int argc, char **argv) {
 
   //struct timeval timeout = {sec,0};
   int n; //return value, if we timed out or not
-  //TODO: create a function and remake the set before each select block
-  FD_ZERO(&set);
-  FD_SET(lsdp,&set);
-  FD_SET(lsdo,&set);
   int maxSD = 0;
-  if(lsdp > lsdo) {
-    maxSD = lsdp;
-  } else {
-    maxSD = lsdo;
-  }
-
   int visits = 0;
   /* Main server loop - accept and handle requests */
   while (1) {
 
-    fprintf(stderr,"SELECT, LSDP:%d LSDO:%d\n", lsdp, lsdo);
+    maxSD = makeSet(set);
+
+    fprintf(stderr,"SELECT, LSDP:%d LSDO:%d maxSD:%d\n", lsdp, lsdo, maxSD);
     n =  select(maxSD+1,&set,NULL,NULL,NULL); //is there anything to read in time
 
     //iterate and find n sd's put in queue grab from queue
