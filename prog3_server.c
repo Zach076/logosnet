@@ -182,6 +182,7 @@ int usernameLogic(uint8_t sec, int sd[], int index) {
   fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n = 1; //return value, if we timed out or not
+  //TODO: can't use select
   FD_ZERO(&set);
   FD_SET(sd[index],&set);
   n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
@@ -203,15 +204,18 @@ int usernameLogic(uint8_t sec, int sd[], int index) {
     if(validUsername(buf) == 1) {
       //TODO:valid, add to usernames
       betterSend(sd[index], valid, sizeof(char));
-      username[index] = strcpy(buf);
+      //TODO: fix line
+      //username[index] = strcpy(buf);
     } else if(validUsername(buf) == 0) {
       //taken, reset timer and ask again
       betterSend(sd[index], taken, sizeof(char));
-      usernameLogic(buf, sec, sd, index);
+      //TODO: fix line
+      //usernameLogic(buf, sec, sd, index);
     } else if(validUsername(buf) == -1) {
       //TODO:invalid, no timer reset ask again
       betterSend(sd[index], invalid, sizeof(char));
-      usernameLogic(buf, sec, sd, index);
+      //TODO: fix line
+      //usernameLogic(buf, sec, sd, index);
     }
 
   }
@@ -229,6 +233,8 @@ int observerUsernameLogic(uint8_t sec, int sd[], int index) {
   fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n = 1; //return value, if we timed out or not
+
+  //TODO: can't use select
   FD_ZERO(&set);
   FD_SET(sd[index],&set);
   n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
@@ -284,21 +290,22 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       i = NUMCLIENTS;
     }
   }
-
+  //if we found an empty space
   if(index >= 0) {
     //if participant
     if(type) {
-      //if connection fails
+      //accept participant
       if ((sdp[index] = accept(lsdp, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
         fprintf(stderr, "Error: Accept failed\n");
         sdp[index] =-1;
       } else {
         //send char 'Y' and ask for username
-        betterSend(sdp[index], 'Y', 1);
-        if(usernameLogic(10,sdp,index)) {
+        //betterSend(sdp[index], 'Y', 1); TODO uncomment this
+         //TODO: uncomment this and test
+        //if(usernameLogic(10,sdp,index)) {
           //give pair
-          userList[index].participantSD = sdp[index];
-        }
+          //userList[index].participantSD = sdp[index];
+        //}
 
       }
     }
@@ -310,11 +317,12 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         sdo[index] =-1;
       } else {
         //send char 'Y' and ask for username
-        //TODO: ask for username and match it.
-        betterSend(sdo[index], 'Y', 1);
-        //observer username logic.
-        pairIndex = observerUsernameLogic(10, sdo, index);
-        userList[pairIndex].observerSD = sdo[index];
+        //TODO: uncomment
+        //betterSend(sdo[index], 'Y', 1);
+
+        //TODO: uncomment observer username logic.
+        //pairIndex = observerUsernameLogic(10, sdo, index);
+        //userList[pairIndex].observerSD = sdo[index];
       }
     }
   }
@@ -325,7 +333,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       tempSD =-1;
     } else {
       //send char 'N'
-      betterSend(tempSD, 'N', 1);
+      //betterSend(tempSD, 'N', 1); TODO: uncomment and test
       close(tempSD);
     }
   }
@@ -336,7 +344,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       tempSD =-1;
     } else {
       //send char 'N'
-      betterSend(tempSD, 'N', 1);
+      //betterSend(tempSD, 'N', 1); TODO: uncomment and test
       close(tempSD);
     }
   }
@@ -562,6 +570,7 @@ int main(int argc, char **argv) {
 
   //struct timeval timeout = {sec,0};
   int n; //return value, if we timed out or not
+  //TODO: create a function and remake the set before each select block
   FD_ZERO(&set);
   FD_SET(lsdp,&set);
   FD_SET(lsdo,&set);
