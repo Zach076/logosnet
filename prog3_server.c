@@ -33,9 +33,9 @@ fd_set set;
 struct userPair{
   int participantSD;
   int observerSD;
-    char username[11];
-    time_t startTime;
-    time_t connectTime;
+  char username[11];
+  time_t startTime;
+  time_t connectTime;
 } userList[255];
 
 //TODO: add a flag to determine which type of client this sd is
@@ -198,16 +198,16 @@ int usernameLogic(int sd[], int index) {
   validUName = validUsername(buf);
 
   if(validUName == TRUE) {
-      betterSend(sd[index], &valid, sizeof(char));
-      for(i = 0; i < strlen(buf); i++) {
-          userList[index].username[i] = buf[i];
-      }
-      userList[index].username[i] = 0;//TODO: don't need this?
+    betterSend(sd[index], &valid, sizeof(char));
+    for(i = 0; i < strlen(buf); i++) {
+      userList[index].username[i] = buf[i];
+    }
+    userList[index].username[i] = 0;//TODO: don't need this?
   }  else if(validUName == FALSE) {
-      betterSend(sd[index], &taken, sizeof(char));
-      userList[index].startTime = time( &userList[index].startTime );
+    betterSend(sd[index], &taken, sizeof(char));
+    userList[index].startTime = time( &userList[index].startTime );
   } else {
-      betterSend(sd[index], &invalid, sizeof(char));
+    betterSend(sd[index], &invalid, sizeof(char));
   }
 
 
@@ -308,14 +308,14 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         betterSend(sdp[index], &valid, 1);
         //TODO: move this to select loop
         //if(usernameLogic(60,sdp,index)) {
-          //TODO remove
-          //fprintf(stderr, "This should print in acceptHandler: part 2 electric boogaloo\n");
+        //TODO remove
+        //fprintf(stderr, "This should print in acceptHandler: part 2 electric boogaloo\n");
 
-          //give pair
-         userList[index].participantSD = sdp[index];
-         memset(userList[index].username,0,sizeof(userList[index].username));
-         userList[index].startTime = time( &userList[index].startTime );
-       //}
+        //give pair
+        userList[index].participantSD = sdp[index];
+        memset(userList[index].username,0,sizeof(userList[index].username));
+        userList[index].startTime = time( &userList[index].startTime );
+        //}
 
       }
     }
@@ -641,7 +641,7 @@ int main(int argc, char **argv) {
       fprintf(stderr,"VISIT number:%d\n", visits );
 
       int activeSd = temp->socketDes;
-        int activeIndex = temp->socketIndex;
+      int activeIndex = temp->socketIndex;
       fprintf(stderr,"Active SD:%d\n", activeSd );
       //if the current sd is the participants listening one, negotiate a new connection
       if (activeSd == lsdp) {
@@ -657,30 +657,30 @@ int main(int argc, char **argv) {
       else if(sdp[activeIndex] == activeSd){
         //if not active participant
         if(strcmp(userList[activeIndex].username,"") ==0){
-            //check timestamps
-            if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > 600) {
-                //disconnect it
-            } else {
-                //username logic
-                usernameLogic(sdp,activeIndex);
-            }
+          //check timestamps
+          if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > 600) {
+            //disconnect it
+          } else {
+            //username logic
+            usernameLogic(sdp,activeIndex);
+          }
         }
         //else the participant has a username already
         else{
-            //check if disconnected in
-            //recieve message from active participant
-            //broadcast to all observers
+          //check if disconnected in
+          //recieve message from active participant
+          //broadcast to all observers
         }
       }
       //if observer
       else if (sdo[activeIndex] == activeSd){
-          //observer username logic
-          if(difftime(oEnd[activeIndex],oStart[activeIndex]) > 600) {
-              //disconnect it
-          } else {
-              //username logic
+        //observer username logic
+        if(difftime(oEnd[activeIndex],oStart[activeIndex]) > 600) {
+          //disconnect it
+        } else {
+          //username logic
 
-          }
+        }
         //message logic
         //handle disconnects
       }
