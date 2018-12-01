@@ -35,7 +35,7 @@ void betterSend(int sd, void* buf, size_t len) {
 
 //reads from stdin within a certain time frame,
 //returning if the timeout was reached or not
-int reader(char* guess, uint8_t sec) {
+int reader(char* buf, uint8_t sec) {
   fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n; //return value, if we timed out or not
@@ -50,7 +50,7 @@ int reader(char* guess, uint8_t sec) {
     n = 0;
   } else {
     //get word
-    fgets(guess,MAXMSGSIZE,stdin);
+    fgets(buf,MAXMSGSIZE,stdin);
     n = 1;
   }
   return n;
@@ -58,15 +58,25 @@ int reader(char* guess, uint8_t sec) {
 
 //recieves data drom a send, storing the data of length len to buf
 //prints error if recieve fails
-void recieve(int sd, void* buf, size_t len, char* error) {
+void recieve(int sd, void* buf, char* error) {
+  //TODO: recieve length then message
   ssize_t n;
-  //recieve data
-  n = recv(sd, buf, len, MSG_WAITALL);
-  //if recieved incorrectly print error, disconnect from server, and exit
-  if (n != len) {
-    fprintf(stderr,"Read Error: %s Score not read properly\n", error);
+  uint8_t length;
+  //recieve length
+  n = recv(sd, &length, sizeof(uint8_t), MSG_WAITALL);
+  //if recieved incorrectly print error, disconnect both clients, and exit
+  if (n != sizeof(uint8_t)) {
+    fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
     close(sd);
-    exit(EXIT_FAILURE);
+    sd = -1;
+  }
+
+  n = recv(sd, buf, length, MSG_WAITALL);
+  //if recieved incorrectly print error, disconnect both clients, and exit
+  if (n != length) {
+    fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
+    close(sd);
+    sd = -1;
   }
 }
 
@@ -129,6 +139,33 @@ int main( int argc, char **argv) {
   }
 
   //TODO: fix from here forward
+  char* quit = "/quit";
+  int done = FALSE;
+  //buffer for username and sending messages
+  char buf[1000];
+  memset(&buf, 0, sizeof(buf));
+
+  while(!done) {
+    reader(buf, 60);
+    if(strlen(buf) < 10) {
+      betterSend(sd, buf, sizeof(buf));
+
+      recieve(sd, buf, "username verification");
+      if(buf == 'Y') {
+        done = TRUE;
+      }
+    }
+  }
+
+  done = FALSE;
+  while(!done) {
+    reader(buf, NULL);
+
+    betterSend(sd, buf, sizeof(buf));
+    if(strcmp(buf, quit) == 0) {
+      done = TRUE;
+    }
+  }
 
   //in case real bad things happen still close the socket and exit nicely
   close(sd);
