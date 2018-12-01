@@ -164,7 +164,14 @@ int main( int argc, char **argv) {
   //buffer for username and sending messages
 
   memset(buf, 0, sizeof(buf));
+  recieve(sd,buf,"Connection char");
+  //if server is full
+  if(buf[0] == 'N'){
+      close(sd);
+      exit(EXIT_FAILURE);
+  }
 
+  //else server isn't full negotiate username
   while(!done) {
     reader(buf, 60);
     buf[strlen(buf)-1] = 0;

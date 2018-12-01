@@ -22,8 +22,9 @@
 int pvisits = 0; /* counts participant's connections */
 int ovisits = 0; /* counts observers's connections */
 int sdp[255]; /* socket descriptors for participants */
-char username[255][10]; //usernames for participants
 int sdo[255]; /* socket descriptors for observers */
+time_t oStart[255];
+time_t oEnd[255];
 int tempSD; //to send clients an 'N' if all slots are taken
 int lsdp; //listening socket descriptor for participants
 int lsdo; //listening socket descriptor for observers
@@ -32,11 +33,15 @@ fd_set set;
 struct userPair{
   int participantSD;
   int observerSD;
+    char username[11];
+    time_t startTime;
+    time_t connectTime;
 } userList[255];
 
 //TODO: add a flag to determine which type of client this sd is
 struct node{
   int socketDes;
+  int socketIndex;
   struct node *nextnode;
 };
 
@@ -59,7 +64,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
     if(n == -1) {
       //if error is not fixable, disconnect client
       if(errno != ENOBUFS && errno != ENOMEM) {
-        close(sd);
+        close(sd);//TODO: disconnect logic
       }
     }
   }
@@ -118,7 +123,7 @@ void recieve(int sd, void* buf, char* error) {
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint8_t)) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
-    close(sd);
+    close(sd);//TODO: disconnect logic
     sd = -1;
   }
 
@@ -161,7 +166,7 @@ int validUsername(char* buf) {
   if(valid) {
 
     for(i = 0; i < 256; i++) {
-      if(!strcmp(buf,username[i])) {
+      if(!strcmp(buf,userList[i].username)) {
         taken = TRUE;
         i = 256;
       }
@@ -178,7 +183,7 @@ int validUsername(char* buf) {
   }
 }
 //TODO: can't use select anywhere else
-int usernameLogic(uint8_t sec, int sd[], int index) {
+int usernameLogic(int sd[], int index) {
   //TODO: check username length client side
   char buf[11];
   memset(buf,0,sizeof(buf));
@@ -186,47 +191,27 @@ int usernameLogic(uint8_t sec, int sd[], int index) {
   char valid = 'Y';
   char invalid = 'I';
   char* error = "Username";
-  //fd_set set;
-  struct timeval timeout = {sec,0}; //set turn timer
-  int n = 1; //return value, if we timed out or not
-  FD_ZERO(&set);
-  FD_SET(sd[index],&set);
-  n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
   int validUName;
-  if(n == 0){
-    //timeout
-    //disconnect
-    close(sd[index]);
-    sd[index] = -1;
-    n = 0;
-  } else if(n == -1) {
-    //error
-    close(sd[index]);
-    sd[index] = -1;
-    n = 0;
-  } else {
+  int i;
 
-    recieve(sd[index], buf, error);
-    validUName = validUsername(buf);
-    // if the username is valid
-    if(validUName == TRUE) {
-      //TODO:valid, add to usernames
+  recieve(sd[index], buf, error);
+  validUName = validUsername(buf);
+
+  if(validUName == TRUE) {
       betterSend(sd[index], &valid, sizeof(char));
-      //TODO check if strcpy works
-      //username[index] = buf;
-      strcpy(username[index],buf);
-    } else if(validUName == FALSE) {
-      //taken, reset timer and ask again
+      for(i = 0; i < strlen(buf); i++) {
+          userList[index].username[i] = buf[i];
+      }
+      userList[index].username[i] = 0;//TODO: don't need this?
+  }  else if(validUName == FALSE) {
       betterSend(sd[index], &taken, sizeof(char));
-      usernameLogic(sec, sd, index);
-    } else if(validUName == -1) {
-      //TODO:invalid, no timer reset ask again
+      userList[index].startTime = time( &userList[index].startTime );
+  } else {
       betterSend(sd[index], &invalid, sizeof(char));
-      usernameLogic(sec, sd, index);
-    }
-
   }
-  return n;
+
+
+
 }
 
 int validObserverUsername(char* buf) {
@@ -234,7 +219,7 @@ int validObserverUsername(char* buf) {
   int i = 0;
 
   for(i = 0; i < 256; i++) {
-    if(!strcmp(buf,username[i])) {
+    if(!strcmp(buf,userList[i].username)) {
       taken = i;
       i = 256;
     }
@@ -279,7 +264,7 @@ int observerUsernameLogic(uint8_t sec, int sd[], int index) {
       close(sd[index]);
     } else if(userList[n].observerSD >0) {
       betterSend(sd[index], &taken, sizeof(char));
-      usernameLogic(sec, sd, index);
+      //usernameLogic(sec, sd, index);
     } else {
       betterSend(sd[index], &valid, sizeof(char));
       userList[n].observerSD = sdo[index];
@@ -306,26 +291,31 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       i = NUMCLIENTS;
     }
   }
-
+  //if we found an open index
   if(index >= 0) {
     //if participant
     if(type) {
-      //if connection fails
+      //try and accept new connection for participant
       if ((sdp[index] = accept(lsdp, (struct sockaddr *)&cad, (socklen_t*)&alen)) < 0) {
         fprintf(stderr, "Error: Accept failed\n");
         sdp[index] =-1;
-      } else {
+      }
+      //if the accept succeeded send 'Y'
+      else {
         //TODO debug
         fprintf(stderr, "This should print in acceptHandler: part 1\n");
-        //send char 'Y' and ask for username
+        //send char 'Y' place into userList
         betterSend(sdp[index], &valid, 1);
-        if(usernameLogic(60,sdp,index)) {
+        //TODO: move this to select loop
+        //if(usernameLogic(60,sdp,index)) {
           //TODO remove
-          fprintf(stderr, "This should print in acceptHandler: part 2 electric boogaloo\n");
+          //fprintf(stderr, "This should print in acceptHandler: part 2 electric boogaloo\n");
 
           //give pair
          userList[index].participantSD = sdp[index];
-       }
+         memset(userList[index].username,0,sizeof(userList[index].username));
+         userList[index].startTime = time( &userList[index].startTime );
+       //}
 
       }
     }
@@ -340,8 +330,10 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         //TODO: ask for username and match it.
         //TODO:what if participant already has an observer?
         betterSend(sdo[index], &valid, 1);
+        oStart[index] = time ( &oStart[index] );
         //observer username logic.
-        observerUsernameLogic(60, sdo, index);
+        //TODO: move into select loop
+        //observerUsernameLogic(60, sdo, index);
       }
     }
   }
@@ -417,6 +409,7 @@ void findReadySockets(int n){
   if(FD_ISSET(lsdp, &set)){
     struct node *temp = (struct node *)malloc(sizeof(struct node));
     temp->socketDes = lsdp;
+    temp->socketIndex = -1;
     enqueue(temp);
     numfound++;
   }
@@ -425,6 +418,7 @@ void findReadySockets(int n){
   if(FD_ISSET(lsdo,&set)){
     struct node *temp = (struct node *)malloc(sizeof(struct node));
     temp ->socketDes = lsdo;
+    temp->socketIndex = -1;
     enqueue(temp);
     numfound++;
   }
@@ -436,6 +430,8 @@ void findReadySockets(int n){
       //create and add a new node to the request queue
       struct node *temp = (struct node *)malloc(sizeof(struct node));
       temp ->socketDes = sdp[i];
+      temp->socketIndex = i;
+      userList[i].connectTime = time( &userList[i].connectTime );
       enqueue(temp);
     }
     //check each observer socket descriptor
@@ -443,6 +439,8 @@ void findReadySockets(int n){
       //create and add a new node to the request queue
       struct node *temp = (struct node *)malloc(sizeof(struct node));
       temp ->socketDes = sdo[i];
+      temp->socketIndex = i;
+      oEnd[i] = time( &oEnd[i] );
       enqueue(temp);
     }
   }
@@ -457,14 +455,14 @@ int makeSet() {
   for(i = 0; i < 256; i++) {
     if(sdp[i] > 0) {
 
-      fprintf(stderr,"sd found in sdp");
+      fprintf(stderr,"sd found in sdp\n");
       FD_SET(sdp[i],&set);
       if(sdp[i] > maxSD) {
         maxSD = sdp[i];
       }
     }
     if(sdo[i] > 0) {
-      fprintf(stderr,"sd found in sdo");
+      fprintf(stderr,"sd found in sdo\n");
       FD_SET(sdo[i],&set);
       if(sdo[i] > maxSD) {
         maxSD = sdo[i];
@@ -643,6 +641,7 @@ int main(int argc, char **argv) {
       fprintf(stderr,"VISIT number:%d\n", visits );
 
       int activeSd = temp->socketDes;
+        int activeIndex = temp->socketIndex;
       fprintf(stderr,"Active SD:%d\n", activeSd );
       //if the current sd is the participants listening one, negotiate a new connection
       if (activeSd == lsdp) {
@@ -654,11 +653,39 @@ int main(int argc, char **argv) {
         fprintf(stderr,"lsdo\n");
         acceptHandler(cad, OBSERVER);
       }
+      // if participant
+      else if(sdp[activeIndex] == activeSd){
+        //if not active participant
+        if(strcmp(userList[activeIndex].username,"") ==0){
+            //check timestamps
+            if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > 600) {
+                //disconnect it
+            } else {
+                //username logic
+                usernameLogic(sdp,activeIndex);
+            }
+        }
+        //else the participant has a username already
+        else{
+            //check if disconnected in
+            //recieve message from active participant
+            //broadcast to all observers
+        }
+      }
+      //if observer
+      else if (sdo[activeIndex] == activeSd){
+          //observer username logic
+          if(difftime(oEnd[activeIndex],oStart[activeIndex]) > 600) {
+              //disconnect it
+          } else {
+              //username logic
 
-      else{
+          }
         //message logic
         //handle disconnects
       }
+
+
     }
 
   }
