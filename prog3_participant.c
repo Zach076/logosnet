@@ -16,21 +16,36 @@
 
 //sends data from buf of size len to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
-void betterSend(int sd, void* buf, size_t len) {
-  ssize_t n = -1;
-  //while errors occur
-  while(n == -1) {
-    //try to send data
-    n = send(sd, buf, len, 0);
-    //if error occured
-    if(n == -1) {
-      //if error is not fixable, disconnect from server, and exit
-      if(errno != ENOBUFS && errno != ENOMEM) {
-        close(sd);
-        exit(EXIT_FAILURE);
-      }
+void betterSend(int sd, void* buf, uint8_t len) {
+
+    //TODO:send length then message
+    ssize_t n = -1;
+    //while errors occur
+    while(n == -1) {
+        //TODO: htons
+        //try to send length
+        n = send(sd, &len, sizeof(uint8_t), 0);
+        //if error occured
+        if(n == -1) {
+            //if error is not fixable, disconnect client
+            if(errno != ENOBUFS && errno != ENOMEM) {
+                close(sd);
+            }
+        }
     }
-  }
+    //if we made it here length got sent correctly
+    n = -1;
+    while(n == -1) {
+        //try to send data
+        n = send(sd, buf, len, 0);
+        //if error occured
+        if(n == -1) {
+            //if error is not fixable, disconnect and exit
+            if(errno != ENOBUFS && errno != ENOMEM) {
+                close(sd);
+            }
+        }
+    }
 }
 
 //reads from stdin within a certain time frame,
@@ -41,7 +56,12 @@ int reader(char* buf, uint8_t sec) {
   int n; //return value, if we timed out or not
   FD_ZERO(&set);
   FD_SET(0,&set);
-  n =  select(1,&set,NULL,NULL,&timeout); //is there anything to read in time
+  if(sec != NULL) {
+      n = select(1, &set, NULL, NULL, &timeout); //is there anything to read in time
+  }
+  else{
+      n = select(1, &set, NULL, NULL, NULL); //is there anything to read in time
+  }
   if(n == 0){
     //timeout
     n = 0;
@@ -142,26 +162,28 @@ int main( int argc, char **argv) {
   char* quit = "/quit";
   int done = FALSE;
   //buffer for username and sending messages
-  char buf[1000];
-  memset(&buf, 0, sizeof(buf));
+
+  memset(buf, 0, sizeof(buf));
 
   while(!done) {
     reader(buf, 60);
+    buf[strlen(buf)-1] = 0;
     if(strlen(buf) < 10) {
-      betterSend(sd, buf, sizeof(buf));
-
+      betterSend(sd, buf, strlen(buf));
+      memset(buf, 0, sizeof(buf));
       recieve(sd, buf, "username verification");
-      if(buf == 'Y') {
+      if(buf[0] == 'Y') {
         done = TRUE;
       }
     }
   }
-
+  //now we have a user name read messages
   done = FALSE;
+  memset(buf,0,sizeof(buf));
   while(!done) {
     reader(buf, NULL);
 
-    betterSend(sd, buf, sizeof(buf));
+    betterSend(sd, buf, strlen(buf));
     if(strcmp(buf, quit) == 0) {
       done = TRUE;
     }

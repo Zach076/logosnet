@@ -27,6 +27,7 @@ int sdo[255]; /* socket descriptors for observers */
 int tempSD; //to send clients an 'N' if all slots are taken
 int lsdp; //listening socket descriptor for participants
 int lsdo; //listening socket descriptor for observers
+fd_set set;
 
 struct userPair{
   int participantSD;
@@ -49,7 +50,7 @@ struct queue{
 void betterSend(int sd, void* buf, uint8_t len) {
 
   //TODO:send length then message
-  size_t n = -1;
+  ssize_t n = -1;
   //while errors occur
   while(n == -1) {
     //try to send data
@@ -62,7 +63,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
       }
     }
   }
-
+  n = -1;
   while(n == -1) {
     //try to send data
     n = send(sd, buf, len, 0);
@@ -79,7 +80,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
 void bigSend(int sd, void* buf, uint16_t len) {
 
   //TODO:send length then message
-  size_t n = -1;
+  ssize_t n = -1;
   //while errors occur
   while(n == -1) {
 
@@ -94,7 +95,7 @@ void bigSend(int sd, void* buf, uint16_t len) {
       }
     }
   }
-
+  n =-1;
   while(n == -1) {
     //try to send data
     n = send(sd, buf, len, 0);
@@ -139,12 +140,16 @@ int validUsername(char* buf) {
     //TODO: better comments
     if(buf[i] > 64 && buf[i] < 91) {
       //nothing
+      i++;
     } else if (buf[i] > 96 && buf[i] < 123) {
       //nothing
+      i++;
     } else if(buf[i] > 47 && buf[i] < 58) {
       //nothing
+      i++;
     } else if(buf[i] == 95) {
       //nothing
+      i++;
     } else if(buf[i] == 0) {
       done = TRUE;
     } else {
@@ -172,7 +177,7 @@ int validUsername(char* buf) {
     return -1;
   }
 }
-
+//TODO: can't use select anywhere else
 int usernameLogic(uint8_t sec, int sd[], int index) {
   //TODO: check username length client side
   char buf[11];
@@ -181,12 +186,13 @@ int usernameLogic(uint8_t sec, int sd[], int index) {
   char valid = 'Y';
   char invalid = 'I';
   char* error = "Username";
-  fd_set set;
+  //fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n = 1; //return value, if we timed out or not
   FD_ZERO(&set);
   FD_SET(sd[index],&set);
   n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
+  int validUName;
   if(n == 0){
     //timeout
     //disconnect
@@ -201,18 +207,19 @@ int usernameLogic(uint8_t sec, int sd[], int index) {
   } else {
 
     recieve(sd[index], buf, error);
-
-    if(validUsername(buf) == 1) {
+    validUName = validUsername(buf);
+    // if the username is valid
+    if(validUName == TRUE) {
       //TODO:valid, add to usernames
       betterSend(sd[index], &valid, sizeof(char));
       //TODO check if strcpy works
       //username[index] = buf;
       strcpy(username[index],buf);
-    } else if(validUsername(buf) == 0) {
+    } else if(validUName == FALSE) {
       //taken, reset timer and ask again
       betterSend(sd[index], &taken, sizeof(char));
       usernameLogic(sec, sd, index);
-    } else if(validUsername(buf) == -1) {
+    } else if(validUName == -1) {
       //TODO:invalid, no timer reset ask again
       betterSend(sd[index], &invalid, sizeof(char));
       usernameLogic(sec, sd, index);
@@ -244,7 +251,7 @@ int observerUsernameLogic(uint8_t sec, int sd[], int index) {
   char valid = 'Y';
   char invalid = 'N';
   char* error = "Username";
-  fd_set set;
+  //fd_set set;
   struct timeval timeout = {sec,0}; //set turn timer
   int n = 1; //return value, if we timed out or not
   FD_ZERO(&set);
@@ -308,17 +315,17 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         fprintf(stderr, "Error: Accept failed\n");
         sdp[index] =-1;
       } else {
-        //TODO remove
+        //TODO debug
         fprintf(stderr, "This should print in acceptHandler: part 1\n");
         //send char 'Y' and ask for username
         betterSend(sdp[index], &valid, 1);
-        if(usernameLogic(10,sdp,index)) {
+        if(usernameLogic(60,sdp,index)) {
           //TODO remove
           fprintf(stderr, "This should print in acceptHandler: part 2 electric boogaloo\n");
 
           //give pair
-          userList[index].participantSD = sdp[index];
-        }
+         userList[index].participantSD = sdp[index];
+       }
 
       }
     }
@@ -334,7 +341,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         //TODO:what if participant already has an observer?
         betterSend(sdo[index], &valid, 1);
         //observer username logic.
-        observerUsernameLogic(10, sdo, index);
+        observerUsernameLogic(60, sdo, index);
       }
     }
   }
@@ -393,7 +400,7 @@ struct node* dequeue(){
 
 }
 
-void findReadySockets(fd_set set, int n){
+void findReadySockets(int n){
 
   /*go through set
   * for each item in set
@@ -441,7 +448,7 @@ void findReadySockets(fd_set set, int n){
   }
 }
 
-int makeSet(fd_set set) {
+int makeSet() {
   int i;
   int maxSD = 0;
   FD_ZERO(&set);
@@ -449,12 +456,15 @@ int makeSet(fd_set set) {
   FD_SET(lsdo,&set);
   for(i = 0; i < 256; i++) {
     if(sdp[i] > 0) {
+
+      fprintf(stderr,"sd found in sdp");
       FD_SET(sdp[i],&set);
       if(sdp[i] > maxSD) {
         maxSD = sdp[i];
       }
     }
     if(sdo[i] > 0) {
+      fprintf(stderr,"sd found in sdo");
       FD_SET(sdo[i],&set);
       if(sdo[i] > maxSD) {
         maxSD = sdo[i];
@@ -608,7 +618,7 @@ int main(int argc, char **argv) {
 
 
   //TODO: fix from here forward
-  fd_set set;
+  //fd_set set;
 
   //struct timeval timeout = {sec,0};
   int n; //return value, if we timed out or not
@@ -617,14 +627,14 @@ int main(int argc, char **argv) {
   /* Main server loop - accept and handle requests */
   while (1) {
 
-    maxSD = makeSet(set);
+    maxSD = makeSet();
 
     fprintf(stderr,"SELECT, LSDP:%d LSDO:%d maxSD:%d\n", lsdp, lsdo, maxSD);
     n =  select(maxSD+1,&set,NULL,NULL,NULL); //is there anything to read in time
 
     //iterate and find n sd's put in queue grab from queue
 
-    findReadySockets(set,n);
+    findReadySockets(n);
 
     //loop until queue is empty
     while((temp = dequeue()) != NULL) {
