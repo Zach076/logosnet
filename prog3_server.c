@@ -50,6 +50,28 @@ struct queue{
   struct node *last;
 }requestqueue;
 
+void disconnect(int index, int type) {
+
+  //if participant, clear the struct username and participantSD
+  if(type == PARTICIPANT) {
+    close(sdp[index]);
+    sdp[index] = -1;
+    userPair[index].participantSD = 0;
+    memset(&userPair[index].username, 0, sizeof(userPair[index].username));
+  }
+
+  //if participant, or just observer
+  //clear sdo and userList of observerSD
+  for(int i = 0; i < NUMCLIENTS; i++) {
+    if(userPair[index].observerSD == sdo[i]) {
+      close(sdo[i]);
+      sdo[i] = -1;
+      i = NUMCLIENTS;
+    }
+  }
+  userPair[index].observerSD = 0;
+}
+
 //sends data from buf of size len to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
 void betterSend(int sd, void* buf, uint8_t len) {
@@ -102,6 +124,7 @@ void bigSend(int sd, void* buf, uint16_t len) {
   }
   n =-1;
   while(n == -1) {
+    buf = htons(buf);
     //try to send data
     n = send(sd, buf, len, 0);
     //if error occured
@@ -134,6 +157,89 @@ void recieve(int sd, void* buf, char* error) {
     close(sd);
     sd = -1;
   }
+}
+
+void bigRecieve(int sd, void* buf, char* error) {
+  //TODO: recieve length then message
+  ssize_t n;
+  uint16_t length;
+  //recieve length
+  n = recv(sd, &length, sizeof(uint16_t), MSG_WAITALL);
+  length = ntohs(length);
+  //if recieved incorrectly print error, disconnect both clients, and exit
+  if (n != sizeof(uint16_t)) {
+    fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
+    close(sd);//TODO: disconnect logic
+    sd = -1;
+  }
+
+  n = recv(sd, buf, length, MSG_WAITALL);
+  buf = ntohs(buf);
+  //if recieved incorrectly print error, disconnect both clients, and exit
+  if (n != length) {
+    fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
+    close(sd);
+    sd = -1;
+  }
+}
+
+void broadcast(char* buf) {
+  for(int i = 0; i < NUMCLIENTS;i++) {
+    if(userPair[i].observerSD > 0) {
+      bigSend(userPair[i].observerSD, buf, sizeof(buf));
+    }
+  }
+}
+
+void privateMsg(char* username, char* buf, int index) {
+  int sent = FALSE;
+
+  for(int i = 0; i < NUMCLIENTS;i++) {
+    if(strcmp(userPair[i].username, username) == 0) {
+      bigSend(userPair[i].observerSD, buf, sizeof(buf));
+      i = NUMCLIENTS;
+    }
+  }
+  if(!sent) {
+    buf = "Warning: user " + username + "doesn't exist...";
+    bigSend(userPair[index].observerSD, buf, sizeof(buf));
+  } else {
+    bigSend(userPair[index].observerSD, buf, sizeof(buf));
+  }
+}
+
+void msgHandler(int index) {
+  char username[11];
+
+  char newBuf[1014];
+  newBuf[0] = '>';
+  for(int i = 0; i < 11-strlen(userList[index].username); i++) {
+    newBuf[i] = ' ';
+  }
+  strcat(newBuf, userList[index].username);
+  newBuf[12] = ':';
+  newBuf[13] = ' ';
+
+  memset(username, 0 , sizeof(username));
+  memset(newBuf, 0 , sizeof(newBuf));
+
+  bigRecieve(sdp[index], buf, "Message");
+
+  strcat(newBuf, buf);
+
+  if(buf[0] == '@') {
+    for(int i = 1; i < 12; i++) {
+      if(buf[i] != ' ') {
+        username[i-1] = buf[i];
+      } else {
+        i = 12;
+      }
+    }
+    privateMsg(username, newBuf, index);
+  } else {
+    broadcast(newBuf);
+  }
+
 }
 
 int validObserverUsername(char* buf) {
@@ -208,6 +314,9 @@ int usernameLogic(int index, int type) {
   char* error = "Username";
   int validUName;
   int i;
+  char user[28];
+  user = "User ";
+  char hasJoined = " has joined";
 
   if(type == PARTICIPANT) {
       recieve(sdp[index], buf, error);
@@ -218,7 +327,10 @@ int usernameLogic(int index, int type) {
           for (i = 0; i < strlen(buf); i++) {
               userList[index].username[i] = buf[i];
           }
-          userList[index].username[i] = 0;//TODO: don't need this?
+          //userList[index].username[i] = 0;//TODO: don't need this?
+          strcat(user, buf);
+          strcat(user, hasJoined);
+          broadcast(buf)
       } else if (validUName == FALSE) {
           betterSend(sdp[index], &taken, sizeof(char));
           userList[index].startTime = time(&userList[index].startTime);
@@ -641,6 +753,7 @@ int main(int argc, char **argv) {
           //check if disconnected in recieve
           //recieve message from active participant
           //broadcast to all observers
+          msgHandler(activeIndex);
         }
       }
 
@@ -655,14 +768,9 @@ int main(int argc, char **argv) {
           //else we are negotiating a username
           usernameLogic(activeIndex, OBSERVER);
         }
-
-
       }
-
-
     }
-
   }
-  //at end of game close the socket and exit
+  //shouldn't get here but ok
   exit(EXIT_SUCCESS);
 }

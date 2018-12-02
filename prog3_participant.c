@@ -48,6 +48,39 @@ void betterSend(int sd, void* buf, uint8_t len) {
   }
 }
 
+void bigSend(int sd, void* buf, uint16_t len) {
+
+  //TODO:send length then message
+  ssize_t n = -1;
+  //while errors occur
+  while(n == -1) {
+
+    len = htons(len);
+    //try to send data
+    n = send(sd, &len, sizeof(uint16_t), 0);
+    //if error occured
+    if(n == -1) {
+      //if error is not fixable, disconnect client
+      if(errno != ENOBUFS && errno != ENOMEM) {
+        close(sd);
+      }
+    }
+  }
+  n =-1;
+  while(n == -1) {
+    buf = htons(buf);
+    //try to send data
+    n = send(sd, buf, len, 0);
+    //if error occured
+    if(n == -1) {
+      //if error is not fixable, disconnect and exit
+      if(errno != ENOBUFS && errno != ENOMEM) {
+        close(sd);
+      }
+    }
+  }
+}
+
 //reads from stdin within a certain time frame,
 //returning if the timeout was reached or not
 int reader(char* buf, uint8_t sec) {
@@ -87,11 +120,35 @@ void recieve(int sd, void* buf, char* error) {
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint8_t)) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
-    close(sd);
+    close(sd);//TODO: disconnect logic
     sd = -1;
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
+  //if recieved incorrectly print error, disconnect both clients, and exit
+  if (n != length) {
+    fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
+    close(sd);
+    sd = -1;
+  }
+}
+
+void bigRecieve(int sd, void* buf, char* error) {
+  //TODO: recieve length then message
+  ssize_t n;
+  uint16_t length;
+  //recieve length
+  n = recv(sd, &length, sizeof(uint16_t), MSG_WAITALL);
+  length = ntohs(length);
+  //if recieved incorrectly print error, disconnect both clients, and exit
+  if (n != sizeof(uint16_t)) {
+    fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
+    close(sd);//TODO: disconnect logic
+    sd = -1;
+  }
+
+  n = recv(sd, buf, length, MSG_WAITALL);
+  buf = ntohs(buf);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -173,14 +230,21 @@ int main( int argc, char **argv) {
 
   //else server isn't full negotiate username
   while(!done) {
+    fprintf(stderr, "Enter username: ");
     reader(buf, 60);
     buf[strlen(buf)-1] = 0;
     if(strlen(buf) < 10) {
       betterSend(sd, buf, strlen(buf));
       memset(buf, 0, sizeof(buf));
-      recieve(sd, buf, "username verification");
+      recieve(sd, buf, "Username verification");
       if(buf[0] == 'Y') {
         done = TRUE;
+      } else if(buf[0] == 'T') {
+        fprintf(stderr, "Username taken, choose another.\n");
+      } else if(buf[0] == 'N') {
+        fprintf(stderr, "No participants with that username.\n");
+        close(sd);
+        exit(EXIT_SUCCESS);
       }
     }
   }
@@ -188,9 +252,10 @@ int main( int argc, char **argv) {
   done = FALSE;
   memset(buf,0,sizeof(buf));
   while(!done) {
+    fprintf(stderr, "\nEnter Message: ");
     reader(buf, NULL);
 
-    betterSend(sd, buf, strlen(buf));
+    bigSend(sd, buf, strlen(buf));
     if(strcmp(buf, quit) == 0) {
       done = TRUE;
     }
