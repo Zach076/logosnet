@@ -184,6 +184,7 @@ int main( int argc, char **argv) {
       }
     }
   }
+  fprintf(stderr, "bleh");
   //now we have a user name read messages
   done = FALSE;
   memset(buf,0,sizeof(buf));

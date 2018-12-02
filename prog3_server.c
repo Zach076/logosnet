@@ -136,6 +136,20 @@ void recieve(int sd, void* buf, char* error) {
   }
 }
 
+int validObserverUsername(char* buf) {
+    int taken = -1;
+    int i = 0;
+
+    for(i = 0; i < 256; i++) {
+        if(!strcmp(buf,userList[i].username)) {
+            taken = i;
+            i = 256;
+        }
+    }
+
+    return taken;
+}
+
 int validUsername(char* buf) {
   int taken = FALSE;
   int done = FALSE;
@@ -183,94 +197,52 @@ int validUsername(char* buf) {
   }
 }
 //TODO: can't use select anywhere else
-int usernameLogic(int sd[], int index) {
+int usernameLogic(int index, int type) {
   //TODO: check username length client side
   char buf[11];
   memset(buf,0,sizeof(buf));
   char taken = 'T';
   char valid = 'Y';
   char invalid = 'I';
+  char discon = 'N';
   char* error = "Username";
   int validUName;
   int i;
 
-  recieve(sd[index], buf, error);
-  validUName = validUsername(buf);
+  if(type == PARTICIPANT) {
+      recieve(sdp[index], buf, error);
+      validUName = validUsername(buf);
 
-  if(validUName == TRUE) {
-    betterSend(sd[index], &valid, sizeof(char));
-    for(i = 0; i < strlen(buf); i++) {
-      userList[index].username[i] = buf[i];
-    }
-    userList[index].username[i] = 0;//TODO: don't need this?
-  }  else if(validUName == FALSE) {
-    betterSend(sd[index], &taken, sizeof(char));
-    userList[index].startTime = time( &userList[index].startTime );
+      if (validUName == TRUE) {
+          betterSend(sdp[index], &valid, sizeof(char));
+          for (i = 0; i < strlen(buf); i++) {
+              userList[index].username[i] = buf[i];
+          }
+          userList[index].username[i] = 0;//TODO: don't need this?
+      } else if (validUName == FALSE) {
+          betterSend(sdp[index], &taken, sizeof(char));
+          userList[index].startTime = time(&userList[index].startTime);
+      } else {
+          betterSend(sdp[index], &invalid, sizeof(char));
+      }
   } else {
-    betterSend(sd[index], &invalid, sizeof(char));
+      recieve(sdo[index], buf, error);
+      i = validObserverUsername(buf);
+
+      if (i >= 0) {
+          if(userList[i].observerSD == 0) {
+              betterSend(sdo[index], &valid, sizeof(char));
+              userList[i].observerSD = sdo[index];
+          } else {
+              betterSend(sdo[index], &taken, sizeof(char));
+              oStart[index] = time( &oStart[index] );
+          }
+      } else {
+          betterSend(sdo[index], &discon, sizeof(char));
+          //TODO: disconnect
+      }
+
   }
-
-
-
-}
-
-int validObserverUsername(char* buf) {
-  int taken = -1;
-  int i = 0;
-
-  for(i = 0; i < 256; i++) {
-    if(!strcmp(buf,userList[i].username)) {
-      taken = i;
-      i = 256;
-    }
-  }
-
-  return taken;
-}
-
-int observerUsernameLogic(uint8_t sec, int sd[], int index) {
-  //TODO: check username length client side
-  char buf[11];
-  memset(buf,0,sizeof(buf));
-  char taken = 'T';
-  char valid = 'Y';
-  char invalid = 'N';
-  char* error = "Username";
-  //fd_set set;
-  struct timeval timeout = {sec,0}; //set turn timer
-  int n = 1; //return value, if we timed out or not
-  FD_ZERO(&set);
-  FD_SET(sd[index],&set);
-  n =  select(sd[index]+1,&set,NULL,NULL,&timeout); //is there anything to read in time
-  if(n == 0){
-    //timeout
-    //disconnect the client
-    close(sd[index]);
-    sd[index] = -1;
-    n = 0;
-  } else if(n == -1) {
-    //socket error
-    close(sd[index]);
-    sd[index] = -1;
-    n = 0;
-  } else {
-    //sent user name
-    recieve(sd[index], buf, error);
-
-    n = validObserverUsername(buf);
-    if(n == -1) {
-      //disconnect
-      betterSend(sd[index], &invalid, sizeof(char));
-      close(sd[index]);
-    } else if(userList[n].observerSD >0) {
-      betterSend(sd[index], &taken, sizeof(char));
-      //usernameLogic(sec, sd, index);
-    } else {
-      betterSend(sd[index], &valid, sizeof(char));
-      userList[n].observerSD = sdo[index];
-    }
-  }
-  return n;
 }
 
 void acceptHandler(struct sockaddr_in cad, int type) {
@@ -455,14 +427,12 @@ int makeSet() {
   for(i = 0; i < 256; i++) {
     if(sdp[i] > 0) {
 
-      fprintf(stderr,"sd found in sdp\n");
       FD_SET(sdp[i],&set);
       if(sdp[i] > maxSD) {
         maxSD = sdp[i];
       }
     }
     if(sdo[i] > 0) {
-      fprintf(stderr,"sd found in sdo\n");
       FD_SET(sdo[i],&set);
       if(sdo[i] > maxSD) {
         maxSD = sdo[i];
@@ -661,28 +631,32 @@ int main(int argc, char **argv) {
           if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > 600) {
             //disconnect it
           } else {
-            //username logic
-            usernameLogic(sdp,activeIndex);
+            //negotiate user name
+            usernameLogic(activeIndex, PARTICIPANT);
+            //TODO: broadcast username message to all observers
           }
         }
-        //else the participant has a username already
+        //else the participant has a username already and it must be some message
         else{
-          //check if disconnected in
+          //check if disconnected in recieve
           //recieve message from active participant
           //broadcast to all observers
         }
       }
-      //if observer
+
+      //if observer is ready for something
       else if (sdo[activeIndex] == activeSd){
+
         //observer username logic
+        //check if observer took to long
         if(difftime(oEnd[activeIndex],oStart[activeIndex]) > 600) {
           //disconnect it
         } else {
-          //username logic
-
+          //else we are negotiating a username
+          usernameLogic(activeIndex, OBSERVER);
         }
-        //message logic
-        //handle disconnects
+
+
       }
 
 
