@@ -674,13 +674,11 @@ int main(int argc, char **argv) {
 
   int n; //return value, if we timed out or not
   int maxSD = 0;
-  int visits = 0;
   /* Main server loop - accept and handle requests */
   while (1) {
 
     maxSD = makeSet();
 
-    fprintf(stderr,"SELECT, LSDP:%d LSDO:%d maxSD:%d\n", lsdp, lsdo, maxSD);
     n =  select(maxSD+1,&set,NULL,NULL,NULL); //is there anything to read in time
 
     //iterate and find n sd's put in queue grab from queue
@@ -690,20 +688,14 @@ int main(int argc, char **argv) {
     //loop until queue is empty
     while((temp = dequeue()) != NULL) {
 
-      visits++;
-      fprintf(stderr,"VISIT number:%d\n", visits );
-
       int activeSd = temp->socketDes;
       int activeIndex = temp->socketIndex;
-      fprintf(stderr,"Active SD:%d\n", activeSd );
       //if the current sd is the participants listening one, negotiate a new connection
       if (activeSd == lsdp) {
-        fprintf(stderr,"lsdp\n");
         acceptHandler(cad, PARTICIPANT);
       }
       //if the current sd is the observers listening one, negotiate a new connection
       else if (activeSd == lsdo) {
-        fprintf(stderr,"lsdo\n");
         acceptHandler(cad, OBSERVER);
       }
       // if participant
@@ -712,7 +704,7 @@ int main(int argc, char **argv) {
         if(strcmp(userList[activeIndex].username,"") ==0){
           //check timestamps
           if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > 600) {
-            //disconnect it
+            disconnect(activeIndex, PARTICIPANT);
           } else {
             //negotiate user name
             usernameLogic(activeIndex, PARTICIPANT);
@@ -734,7 +726,7 @@ int main(int argc, char **argv) {
         //observer username logic
         //check if observer took to long
         if(difftime(oEnd[activeIndex],oStart[activeIndex]) > 600) {
-          //disconnect it
+          disconnect(activeIndex, OBSERVER);
         } else {
           //else we are negotiating a username
           usernameLogic(activeIndex, OBSERVER);
