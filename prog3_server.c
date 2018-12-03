@@ -38,7 +38,6 @@ struct userPair{
   time_t connectTime;
 } userList[255];
 
-//TODO: add a flag to determine which type of client this sd is
 struct node{
   int socketDes;
   int socketIndex;
@@ -74,9 +73,8 @@ void disconnect(int index, int type) {
 
 //sends data from buf of size len to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
-void betterSend(int sd, void* buf, uint8_t len) {
+void betterSend(int sd, void* buf, uint8_t len, int index, int type) {
 
-  //TODO:send length then message
   ssize_t n = -1;
   //while errors occur
   while(n == -1) {
@@ -86,7 +84,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
     if(n == -1) {
       //if error is not fixable, disconnect client
       if(errno != ENOBUFS && errno != ENOMEM) {
-        close(sd);//TODO: disconnect logic
+        disconnect(index, type);
       }
     }
   }
@@ -98,15 +96,14 @@ void betterSend(int sd, void* buf, uint8_t len) {
     if(n == -1) {
       //if error is not fixable, disconnect and exit
       if(errno != ENOBUFS && errno != ENOMEM) {
-        close(sd);
+        disconnect(index, type);
       }
     }
   }
 }
 
-void bigSend(int sd, void* buf, uint16_t len) {
+void bigSend(int sd, void* buf, uint16_t len, int index, int type) {
 
-  //TODO:send length then message
   ssize_t n = -1;
   //while errors occur
   while(n == -1) {
@@ -118,7 +115,7 @@ void bigSend(int sd, void* buf, uint16_t len) {
     if(n == -1) {
       //if error is not fixable, disconnect client
       if(errno != ENOBUFS && errno != ENOMEM) {
-        close(sd);
+        disconnect(index, type);
       }
     }
   }
@@ -131,14 +128,13 @@ void bigSend(int sd, void* buf, uint16_t len) {
     if(n == -1) {
       //if error is not fixable, disconnect and exit
       if(errno != ENOBUFS && errno != ENOMEM) {
-        close(sd);
+        disconnect(index, type);
       }
     }
   }
 }
 
-void recieve(int sd, void* buf, char* error) {
-  //TODO: recieve length then message
+void recieve(int sd, void* buf, char* error, int index, int type) {
   ssize_t n;
   uint8_t length;
   //recieve length
@@ -146,21 +142,19 @@ void recieve(int sd, void* buf, char* error) {
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint8_t)) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
-    close(sd);//TODO: disconnect logic
-    sd = -1;
+    disconnect(index, type);
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
-    close(sd);
-    sd = -1;
+    disconnect(index, type);
   }
 }
 
-void bigRecieve(int sd, void* buf, char* error) {
-  //TODO: recieve length then message
+void bigRecieve(int sd, void* buf, char* error, int index, int type) {
+
   ssize_t n;
   uint16_t length;
   //recieve length
@@ -169,8 +163,7 @@ void bigRecieve(int sd, void* buf, char* error) {
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint16_t)) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
-    close(sd);//TODO: disconnect logic
-    sd = -1;
+    disconnect(index, type);
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
@@ -178,15 +171,14 @@ void bigRecieve(int sd, void* buf, char* error) {
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
-    close(sd);
-    sd = -1;
+    disconnect(index, type);
   }
 }
 
 void broadcast(char* buf) {
   for(int i = 0; i < NUMCLIENTS;i++) {
     if(userList[i].observerSD > 0) {
-      bigSend(userList[i].observerSD, buf, sizeof(buf));
+      bigSend(userList[i].observerSD, buf, sizeof(buf), i, OBSERVER);
     }
   }
 }
@@ -196,7 +188,7 @@ void privateMsg(char* username, char* buf, int index) {
 
   for(int i = 0; i < NUMCLIENTS;i++) {
     if(strcmp(userList[i].username, username) == 0) {
-      bigSend(userList[i].observerSD, buf, sizeof(buf));
+      bigSend(userList[i].observerSD, buf, sizeof(buf), index, OBSERVER);
       i = NUMCLIENTS;
     }
   }
@@ -204,9 +196,9 @@ void privateMsg(char* username, char* buf, int index) {
     buf = "Warning: user ";
     strcat(buf, username);
     strcat(buf, "doesn't exist...");
-    bigSend(userList[index].observerSD, buf, sizeof(buf));
+    bigSend(userList[index].observerSD, buf, sizeof(buf), index, OBSERVER);
   } else {
-    bigSend(userList[index].observerSD, buf, sizeof(buf));
+    bigSend(userList[index].observerSD, buf, sizeof(buf), index, OBSERVER);
   }
 }
 
@@ -228,7 +220,7 @@ void msgHandler(int index) {
   memset(username, 0 , sizeof(username));
   memset(newBuf, 0 , sizeof(newBuf));
 
-  bigRecieve(sdp[index], buf, "Message");
+  bigRecieve(sdp[index], buf, "Message", index, PARTICIPANT);
 
   strcat(newBuf, buf);
 
@@ -267,18 +259,13 @@ int validUsername(char* buf) {
   int i = 0;
   int valid = TRUE;
   while(!done){
-    //TODO: better comments
     if(buf[i] > 64 && buf[i] < 91) {
-      //nothing
       i++;
     } else if (buf[i] > 96 && buf[i] < 123) {
-      //nothing
       i++;
     } else if(buf[i] > 47 && buf[i] < 58) {
-      //nothing
       i++;
     } else if(buf[i] == 95) {
-      //nothing
       i++;
     } else if(buf[i] == 0) {
       done = TRUE;
@@ -307,9 +294,9 @@ int validUsername(char* buf) {
     return -1;
   }
 }
-//TODO: can't use select anywhere else
+
 int usernameLogic(int index, int type) {
-  //TODO: check username length client side
+
   char buf[11];
   memset(buf,0,sizeof(buf));
   char taken = 'T';
@@ -324,39 +311,38 @@ int usernameLogic(int index, int type) {
   char* hasJoined = " has joined";
 
   if(type == PARTICIPANT) {
-      recieve(sdp[index], buf, error);
+      recieve(sdp[index], buf, error, index, type);
       validUName = validUsername(buf);
 
       if (validUName == TRUE) {
-          betterSend(sdp[index], &valid, sizeof(char));
+          betterSend(sdp[index], &valid, sizeof(char), index, type);
           for (i = 0; i < strlen(buf); i++) {
               userList[index].username[i] = buf[i];
           }
-          //userList[index].username[i] = 0;//TODO: don't need this?
           strcat(user, buf);
           strcat(user, hasJoined);
           broadcast(buf);
       } else if (validUName == FALSE) {
-          betterSend(sdp[index], &taken, sizeof(char));
+          betterSend(sdp[index], &taken, sizeof(char), index, type);
           userList[index].startTime = time(&userList[index].startTime);
       } else {
-          betterSend(sdp[index], &invalid, sizeof(char));
+          betterSend(sdp[index], &invalid, sizeof(char), index, type);
       }
   } else {
-      recieve(sdo[index], buf, error);
+      recieve(sdo[index], buf, error, index, type);
       i = validObserverUsername(buf);
 
       if (i >= 0) {
           if(userList[i].observerSD == 0) {
-              betterSend(sdo[index], &valid, sizeof(char));
+              betterSend(sdo[index], &valid, sizeof(char), index, type);
               userList[i].observerSD = sdo[index];
           } else {
-              betterSend(sdo[index], &taken, sizeof(char));
+              betterSend(sdo[index], &taken, sizeof(char), index, type);
               oStart[index] = time( &oStart[index] );
           }
       } else {
-          betterSend(sdo[index], &discon, sizeof(char));
-          //TODO: disconnect
+          betterSend(sdo[index], &discon, sizeof(char), index, type);
+          disconnect(index, type);
       }
 
   }
@@ -391,20 +377,12 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       }
       //if the accept succeeded send 'Y'
       else {
-        //TODO debug
-        fprintf(stderr, "This should print in acceptHandler: part 1\n");
         //send char 'Y' place into userList
-        betterSend(sdp[index], &valid, 1);
-        //TODO: move this to select loop
-        //if(usernameLogic(60,sdp,index)) {
-        //TODO remove
-        //fprintf(stderr, "This should print in acceptHandler: part 2 electric boogaloo\n");
-
+        betterSend(sdp[index], &valid, 1, index, type);
         //give pair
         userList[index].participantSD = sdp[index];
         memset(userList[index].username,0,sizeof(userList[index].username));
         userList[index].startTime = time( &userList[index].startTime );
-        //}
 
       }
     }
@@ -416,13 +394,9 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         sdo[index] =-1;
       } else {
         //send char 'Y' and ask for username
-        //TODO: ask for username and match it.
-        //TODO:what if participant already has an observer?
-        betterSend(sdo[index], &valid, 1);
+        betterSend(sdo[index], &valid, 1, index, type);
         oStart[index] = time ( &oStart[index] );
-        //observer username logic.
-        //TODO: move into select loop
-        //observerUsernameLogic(60, sdo, index);
+        //username logic later
       }
     }
   }
@@ -433,7 +407,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       tempSD =-1;
     } else {
       //send char 'N'
-      betterSend(tempSD, &invalid, 1);
+      betterSend(tempSD, &invalid, 1, index, type);
       close(tempSD);
     }
   }
@@ -444,7 +418,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       tempSD =-1;
     } else {
       //send char 'N'
-      betterSend(tempSD, &invalid, 1);
+      betterSend(tempSD, &invalid, 1, index, type);
       close(tempSD);
     }
   }
@@ -572,11 +546,6 @@ int main(int argc, char **argv) {
   struct sockaddr_in sad; /* structure to hold server's address */
   struct sockaddr_in cad; /* structure to hold client's address */
 
-
-  //TODO: note that we can't keep an index of empty spots because one could have disconnected.
-  //int sdp[255]; /* socket descriptors for participants */
-  //int sdo[255]; /* socket descriptors for observers */
-
   int pPort; /* participant port number */
   int oPort; /* observer port number */
   int alen; /* length of address */
@@ -702,10 +671,7 @@ int main(int argc, char **argv) {
   }
 
 
-  //TODO: fix from here forward
-  //fd_set set;
 
-  //struct timeval timeout = {sec,0};
   int n; //return value, if we timed out or not
   int maxSD = 0;
   int visits = 0;

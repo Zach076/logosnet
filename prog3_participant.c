@@ -18,11 +18,9 @@
 //try to send again, otherwise exit nicely
 void betterSend(int sd, void* buf, uint8_t len) {
 
-  //TODO:send length then message
   ssize_t n = -1;
   //while errors occur
   while(n == -1) {
-    //TODO: htons
     //try to send length
     n = send(sd, &len, sizeof(uint8_t), 0);
     //if error occured
@@ -30,6 +28,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
       //if error is not fixable, disconnect client
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
+        exit(EXIT_SUCCESS);
       }
     }
   }
@@ -43,6 +42,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
       //if error is not fixable, disconnect and exit
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
+        exit(EXIT_SUCCESS);
       }
     }
   }
@@ -50,7 +50,6 @@ void betterSend(int sd, void* buf, uint8_t len) {
 
 void bigSend(int sd, void* buf, uint16_t len) {
 
-  //TODO:send length then message
   ssize_t n = -1;
   //while errors occur
   while(n == -1) {
@@ -63,6 +62,7 @@ void bigSend(int sd, void* buf, uint16_t len) {
       //if error is not fixable, disconnect client
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
+        exit(EXIT_SUCCESS);
       }
     }
   }
@@ -76,6 +76,7 @@ void bigSend(int sd, void* buf, uint16_t len) {
       //if error is not fixable, disconnect and exit
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
+        exit(EXIT_SUCCESS);
       }
     }
   }
@@ -112,7 +113,7 @@ int reader(char* buf, uint8_t sec) {
 //recieves data drom a send, storing the data of length len to buf
 //prints error if recieve fails
 void recieve(int sd, void* buf, char* error) {
-  //TODO: recieve length then message
+
   ssize_t n;
   uint8_t length;
   //recieve length
@@ -120,8 +121,8 @@ void recieve(int sd, void* buf, char* error) {
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint8_t)) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
-    close(sd);//TODO: disconnect logic
-    sd = -1;
+    close(sd);
+    exit(EXIT_SUCCESS);
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
@@ -129,12 +130,12 @@ void recieve(int sd, void* buf, char* error) {
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
     close(sd);
-    sd = -1;
+    exit(EXIT_SUCCESS);
   }
 }
 
 void bigRecieve(int sd, void* buf, char* error) {
-  //TODO: recieve length then message
+
   ssize_t n;
   uint16_t length;
   //recieve length
@@ -143,8 +144,8 @@ void bigRecieve(int sd, void* buf, char* error) {
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint16_t)) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
-    close(sd);//TODO: disconnect logic
-    sd = -1;
+    close(sd);
+    exit(EXIT_SUCCESS);
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
@@ -153,7 +154,7 @@ void bigRecieve(int sd, void* buf, char* error) {
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
     close(sd);
-    sd = -1;
+    exit(EXIT_SUCCESS);
   }
 }
 
@@ -215,7 +216,6 @@ int main( int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  //TODO: fix from here forward
   char* quit = "/quit";
   int done = FALSE;
   //buffer for username and sending messages
