@@ -306,9 +306,10 @@ int usernameLogic(int index, int type) {
   char* error = "Username";
   int validUName;
   int i;
-  char* user = malloc(sizeof(char) * 28);
-  user = "User ";
+  char* user = "User ";
   char* hasJoined = " has joined";
+  char messageBuf[28];
+  memset(messageBuf,0,sizeof(messageBuf));
 
   if(type == PARTICIPANT) {
       recieve(sdp[index], buf, error, index, type);
@@ -319,9 +320,10 @@ int usernameLogic(int index, int type) {
           for (i = 0; i < strlen(buf); i++) {
               userList[index].username[i] = buf[i];
           }
-          strcat(user, buf);
-          strcat(user, hasJoined);
-          broadcast(buf);
+          strcat(messageBuf, user);
+          strcat(messageBuf, buf);
+          strcat(messageBuf, hasJoined);
+          broadcast(messageBuf);
       } else if (validUName == FALSE) {
           betterSend(sdp[index], &taken, sizeof(char), index, type);
           userList[index].startTime = time(&userList[index].startTime);
@@ -703,7 +705,7 @@ int main(int argc, char **argv) {
         //if not active participant
         if(strcmp(userList[activeIndex].username,"") ==0){
           //check timestamps
-          if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > 600) {
+          if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > 10) {
             disconnect(activeIndex, PARTICIPANT);
           } else {
             //negotiate user name
@@ -725,7 +727,7 @@ int main(int argc, char **argv) {
 
         //observer username logic
         //check if observer took to long
-        if(difftime(oEnd[activeIndex],oStart[activeIndex]) > 600) {
+        if(difftime(oEnd[activeIndex],oStart[activeIndex]) > 10) {
           disconnect(activeIndex, OBSERVER);
         } else {
           //else we are negotiating a username
