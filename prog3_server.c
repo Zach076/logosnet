@@ -56,20 +56,20 @@ void disconnect(int index, int type) {
   if(type == PARTICIPANT) {
     close(sdp[index]);
     sdp[index] = -1;
-    userPair[index].participantSD = 0;
-    memset(&userPair[index].username, 0, sizeof(userPair[index].username));
+    userList[index].participantSD = 0;
+    memset(&userList[index].username, 0, sizeof(userList[index].username));
   }
 
   //if participant, or just observer
   //clear sdo and userList of observerSD
   for(int i = 0; i < NUMCLIENTS; i++) {
-    if(userPair[index].observerSD == sdo[i]) {
+    if(userList[index].observerSD == sdo[i]) {
       close(sdo[i]);
       sdo[i] = -1;
       i = NUMCLIENTS;
     }
   }
-  userPair[index].observerSD = 0;
+  userList[index].observerSD = 0;
 }
 
 //sends data from buf of size len to sd and if theres a fixable error,
@@ -185,8 +185,8 @@ void bigRecieve(int sd, void* buf, char* error) {
 
 void broadcast(char* buf) {
   for(int i = 0; i < NUMCLIENTS;i++) {
-    if(userPair[i].observerSD > 0) {
-      bigSend(userPair[i].observerSD, buf, sizeof(buf));
+    if(userList[i].observerSD > 0) {
+      bigSend(userList[i].observerSD, buf, sizeof(buf));
     }
   }
 }
@@ -195,21 +195,24 @@ void privateMsg(char* username, char* buf, int index) {
   int sent = FALSE;
 
   for(int i = 0; i < NUMCLIENTS;i++) {
-    if(strcmp(userPair[i].username, username) == 0) {
-      bigSend(userPair[i].observerSD, buf, sizeof(buf));
+    if(strcmp(userList[i].username, username) == 0) {
+      bigSend(userList[i].observerSD, buf, sizeof(buf));
       i = NUMCLIENTS;
     }
   }
   if(!sent) {
-    buf = "Warning: user " + username + "doesn't exist...";
-    bigSend(userPair[index].observerSD, buf, sizeof(buf));
+    buf = "Warning: user ";
+    strcat(buf, username);
+    strcat(buf, "doesn't exist...");
+    bigSend(userList[index].observerSD, buf, sizeof(buf));
   } else {
-    bigSend(userPair[index].observerSD, buf, sizeof(buf));
+    bigSend(userList[index].observerSD, buf, sizeof(buf));
   }
 }
 
 void msgHandler(int index) {
   char username[11];
+  char buf[1000];
 
   char newBuf[1014];
   newBuf[0] = '>';
@@ -219,6 +222,8 @@ void msgHandler(int index) {
   strcat(newBuf, userList[index].username);
   newBuf[12] = ':';
   newBuf[13] = ' ';
+
+  memset(buf, 0 , sizeof(buf));
 
   memset(username, 0 , sizeof(username));
   memset(newBuf, 0 , sizeof(newBuf));
@@ -314,9 +319,9 @@ int usernameLogic(int index, int type) {
   char* error = "Username";
   int validUName;
   int i;
-  char user[28];
+  char* user = malloc(sizeof(char) * 28);
   user = "User ";
-  char hasJoined = " has joined";
+  char* hasJoined = " has joined";
 
   if(type == PARTICIPANT) {
       recieve(sdp[index], buf, error);
@@ -330,7 +335,7 @@ int usernameLogic(int index, int type) {
           //userList[index].username[i] = 0;//TODO: don't need this?
           strcat(user, buf);
           strcat(user, hasJoined);
-          broadcast(buf)
+          broadcast(buf);
       } else if (validUName == FALSE) {
           betterSend(sdp[index], &taken, sizeof(char));
           userList[index].startTime = time(&userList[index].startTime);
