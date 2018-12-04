@@ -68,7 +68,7 @@ void bigSend(int sd, void* buf, uint16_t len) {
   }
   n =-1;
   while(n == -1) {
-    buf = htons(buf);
+    //buf = htons(buf);
     //try to send data
     n = send(sd, buf, len, 0);
     //if error occured
@@ -118,7 +118,6 @@ void recieve(int sd, void* buf, char* error) {
   uint8_t length;
   //recieve length
   n = recv(sd, &length, sizeof(uint8_t), MSG_WAITALL);
-  length = ntohs(length);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint8_t)) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -127,7 +126,6 @@ void recieve(int sd, void* buf, char* error) {
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
-  buf = ntohs(buf);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -151,7 +149,7 @@ void bigRecieve(int sd, void* buf, char* error) {
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
-  buf = ntohs(buf);
+  //buf = ntohs(buf);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -218,6 +216,11 @@ int main( int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  fd_set set;
+  FD_ZERO(&set);
+  FD_SET(0,&set);
+  FD_SET(sd,&set);
+
   char* quit = "/quit";
   int done = FALSE;
   //buffer for username and sending messages
@@ -231,24 +234,42 @@ int main( int argc, char **argv) {
   }
 
   //else server isn't full negotiate username
-  while(!done) {
-    reader(buf, 60);
-    buf[strlen(buf)-1] = 0;
-    if(strlen(buf) < 10) {
-      betterSend(sd, buf, strlen(buf));
-      memset(buf, 0, sizeof(buf));
-      recieve(sd, buf, "username verification");
-      if(buf[0] == 'Y') {
-        done = TRUE;
-      }
+    while(!done) {
+        fprintf(stderr, "Enter username: ");
+        reader(buf, 60);
+        buf[strlen(buf)-1] = 0;
+        if(strlen(buf) < 10) {
+            betterSend(sd, buf, strlen(buf));
+            memset(buf, 0, sizeof(buf));
+            recieve(sd, buf, "Username verification");
+            if(buf[0] == 'Y') {
+                done = TRUE;
+            } else if(buf[0] == 'T') {
+                fprintf(stderr, "Participant taken, choose another.\n");
+            } else if(buf[0] == 'N') {
+                fprintf(stderr, "No participants with that username.\n");
+                close(sd);
+                exit(EXIT_SUCCESS);
+            }
+        }
     }
-  }
   //now we have a user name read messages
   done = FALSE;
   memset(buf,0,sizeof(buf));
   while(!done) {
-    bigRecieve(sd, buf, "Messages");
-    fprintf(stdout, "%s\n", buf);
+
+    FD_ZERO(&set);
+    FD_SET(0,&set);
+    FD_SET(sd,&set);
+
+    n = select(sd+1, &set, NULL, NULL, NULL);
+
+    if(FD_ISSET(0,&set) && strcmp(buf, quit) == 0) {
+      done = TRUE;
+    } else {
+      bigRecieve(sd, buf, "Messages");
+      fprintf(stdout, "%s\n", buf);
+    }
   }
 
   //in case real bad things happen still close the socket and exit nicely

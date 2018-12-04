@@ -62,13 +62,14 @@ void bigSend(int sd, void* buf, uint16_t len) {
       //if error is not fixable, disconnect client
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
-        exit(EXIT_SUCCESS);
+        exit(EXIT_FAILURE);
       }
     }
   }
   n =-1;
   while(n == -1) {
-    buf = htons(buf);
+    //buf = htons(buf);
+    len = ntohs(len);
     //try to send data
     n = send(sd, buf, len, 0);
     //if error occured
@@ -76,7 +77,7 @@ void bigSend(int sd, void* buf, uint16_t len) {
       //if error is not fixable, disconnect and exit
       if(errno != ENOBUFS && errno != ENOMEM) {
         close(sd);
-        exit(EXIT_SUCCESS);
+        exit(EXIT_FAILURE);
       }
     }
   }
@@ -149,7 +150,7 @@ void bigRecieve(int sd, void* buf, char* error) {
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
-  buf = ntohs(buf);
+  //buf = ntohs(buf);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -241,14 +242,12 @@ int main( int argc, char **argv) {
         done = TRUE;
       } else if(buf[0] == 'T') {
         fprintf(stderr, "Username taken, choose another.\n");
-      } else if(buf[0] == 'N') {
-        fprintf(stderr, "No participants with that username.\n");
-        close(sd);
-        exit(EXIT_SUCCESS);
+      } else if(buf[0] == 'I') {
+        fprintf(stderr, "Invalid username, choose another.\n");
       }
     }
   }
-  //now we have a user name read messages
+  //now we have a user name write messages
   done = FALSE;
   memset(buf,0,sizeof(buf));
   while(!done) {
@@ -256,7 +255,7 @@ int main( int argc, char **argv) {
     reader(buf, NULL);
 
     bigSend(sd, buf, strlen(buf));
-    if(strcmp(buf, quit) == 0) {
+    if(!strcmp(buf, quit)) {
       done = TRUE;
     }
   }

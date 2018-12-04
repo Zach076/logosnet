@@ -121,9 +121,10 @@ void bigSend(int sd, void* buf, uint16_t len, int index, int type) {
   }
   n =-1;
   while(n == -1) {
-    buf = htons(buf);
+    //buf = htons(buf);
+    len = ntohs(len);
     //try to send data
-    n = send(sd, buf, len, 0);
+    n = send(sd, (char *)buf, len, 0);
     //if error occured
     if(n == -1) {
       //if error is not fixable, disconnect and exit
@@ -167,7 +168,7 @@ void bigRecieve(int sd, void* buf, char* error, int index, int type) {
   }
 
   n = recv(sd, buf, length, MSG_WAITALL);
-  buf = ntohs(buf);
+  //buf = ntohs(buf);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -178,7 +179,7 @@ void bigRecieve(int sd, void* buf, char* error, int index, int type) {
 void broadcast(char* buf) {
   for(int i = 0; i < NUMCLIENTS;i++) {
     if(userList[i].observerSD > 0) {
-      bigSend(userList[i].observerSD, buf, sizeof(buf), i, OBSERVER);
+      bigSend(userList[i].observerSD, buf, (uint16_t) strlen(buf), i, OBSERVER);
     }
   }
 }
