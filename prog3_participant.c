@@ -217,7 +217,7 @@ int main( int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  char* quit = "/quit";
+  char* quit = "/quit\n";
   int done = FALSE;
   //buffer for username and sending messages
 
@@ -249,9 +249,9 @@ int main( int argc, char **argv) {
   }
   //now we have a user name write messages
   done = FALSE;
-  memset(buf,0,sizeof(buf));
   while(!done) {
-    fprintf(stderr, "\nEnter Message: ");
+    memset(buf,0,sizeof(buf));
+    fprintf(stderr, "Enter Message: ");
     reader(buf, NULL);
 
     bigSend(sd, buf, strlen(buf));

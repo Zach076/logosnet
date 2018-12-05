@@ -112,6 +112,7 @@ void recieve(int sd, void* buf, char* error) {
   ssize_t n;
   uint8_t length;
   //recieve length
+  memset(buf,0,sizeof(buf));
   n = recv(sd, &length, sizeof(uint8_t), MSG_WAITALL);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != sizeof(uint8_t)) {
@@ -134,6 +135,7 @@ void bigRecieve(int sd, void* buf, char* error) {
   ssize_t n;
   uint16_t length;
   //recieve length
+  memset(buf,0,sizeof(buf));
   n = recv(sd, &length, sizeof(uint16_t), MSG_WAITALL);
   length = ntohs(length);
   //if recieved incorrectly print error, disconnect both clients, and exit
@@ -250,8 +252,8 @@ int main( int argc, char **argv) {
     }
   //now we have a user name read messages
   done = FALSE;
-  memset(buf,0,sizeof(buf));
   while(!done) {
+    memset(buf,0,sizeof(buf));
 
     FD_ZERO(&set);
     FD_SET(0,&set);
@@ -259,11 +261,15 @@ int main( int argc, char **argv) {
 
     n = select(sd+1, &set, NULL, NULL, NULL);
 
-    if(FD_ISSET(0,&set) && strcmp(buf, quit) == 0) {
-      done = TRUE;
+    if(FD_ISSET(0,&set)) {
+        fgets(buf,MAXMSGSIZE,stdin);
+        if(strcmp(buf,quit)){
+            done = TRUE;
+        }
+
     } else {
       bigRecieve(sd, buf, "Messages");
-      fprintf(stdout, "%s\n", buf);
+      fprintf(stdout, "%s", buf);
     }
   }
 

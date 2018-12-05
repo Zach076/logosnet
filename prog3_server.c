@@ -49,13 +49,27 @@ struct queue{
   struct node *last;
 }requestqueue;
 
+void broadcast(char* buf);
+
 void disconnect(int index, int type) {
+  int found = FALSE;
 
   //if participant, clear the struct username and participantSD
   if(type == PARTICIPANT) {
+    char* user = "User ";
+    char* hasLeft = " has left\n";
+    char messageBuf[26];
+    memset(messageBuf,0,sizeof(messageBuf));
+
     close(sdp[index]);
     sdp[index] = -1;
     userList[index].participantSD = 0;
+    strcat(messageBuf, user);
+    strcat(messageBuf, userList[index].username);
+    strcat(messageBuf, hasLeft);
+    if(strcmp(userList[index].username,"") != 0) {
+        broadcast(messageBuf);
+    }
     memset(&userList[index].username, 0, sizeof(userList[index].username));
   }
 
@@ -66,9 +80,15 @@ void disconnect(int index, int type) {
       close(sdo[i]);
       sdo[i] = -1;
       i = NUMCLIENTS;
+      userList[index].observerSD = 0;
+      found = TRUE;
     }
   }
-  userList[index].observerSD = 0;
+  if(!found) {
+      close(sdo[index]);
+      sdo[index] = -1;
+  }
+
 }
 
 //sends data from buf of size len to sd and if theres a fixable error,
@@ -138,6 +158,7 @@ void bigSend(int sd, void* buf, uint16_t len, int index, int type) {
 void recieve(int sd, void* buf, char* error, int index, int type) {
   ssize_t n;
   uint8_t length;
+  memset(buf,0,sizeof(buf));
   //recieve length
   n = recv(sd, &length, sizeof(uint8_t), MSG_WAITALL);
   //if recieved incorrectly print error, disconnect both clients, and exit
@@ -159,6 +180,7 @@ void bigRecieve(int sd, void* buf, char* error, int index, int type) {
   ssize_t n;
   uint16_t length;
   //recieve length
+  memset(buf,0,sizeof(buf));
   n = recv(sd, &length, sizeof(uint16_t), MSG_WAITALL);
   length = ntohs(length);
   //if recieved incorrectly print error, disconnect both clients, and exit
@@ -187,39 +209,46 @@ void broadcast(char* buf) {
 void privateMsg(char* username, char* buf, int index) {
   int sent = FALSE;
 
+  char newBuf[41];
+  memset(newBuf, 0, sizeof(newBuf));
+
   for(int i = 0; i < NUMCLIENTS;i++) {
     if(strcmp(userList[i].username, username) == 0) {
-      bigSend(userList[i].observerSD, buf, sizeof(buf), index, OBSERVER);
+      if(userList[i].observerSD != 0) {
+        bigSend(userList[i].observerSD, buf, strlen(buf), index, OBSERVER);
+      }
       i = NUMCLIENTS;
+      sent = TRUE;
     }
   }
   if(!sent) {
-    buf = "Warning: user ";
-    strcat(buf, username);
-    strcat(buf, "doesn't exist...");
-    bigSend(userList[index].observerSD, buf, sizeof(buf), index, OBSERVER);
+    strcat(newBuf,"Warning: user ");
+    strcat(newBuf, username);
+    strcat(newBuf, "doesn't exist...\n");
+    if(userList[index].observerSD != 0) {
+      bigSend(userList[index].observerSD, newBuf, strlen(newBuf), index, OBSERVER);
+    }
   } else {
-    bigSend(userList[index].observerSD, buf, sizeof(buf), index, OBSERVER);
+    if(userList[index].observerSD != 0) {
+      bigSend(userList[index].observerSD, buf, strlen(buf), index, OBSERVER);
+    }
   }
 }
 
 void msgHandler(int index) {
   char username[11];
   char buf[1000];
-
   char newBuf[1014];
+  memset(buf,0,sizeof(buf));
+  memset(newBuf,0,sizeof(newBuf));
+  memset(username, 0 , sizeof(username));
   newBuf[0] = '>';
   for(int i = 0; i < 11-strlen(userList[index].username); i++) {
-    newBuf[i] = ' ';
+    newBuf[i+1] = ' ';
   }
   strcat(newBuf, userList[index].username);
   newBuf[12] = ':';
   newBuf[13] = ' ';
-
-  memset(buf, 0 , sizeof(buf));
-
-  memset(username, 0 , sizeof(username));
-  memset(newBuf, 0 , sizeof(newBuf));
 
   bigRecieve(sdp[index], buf, "Message", index, PARTICIPANT);
 
@@ -234,8 +263,13 @@ void msgHandler(int index) {
       }
     }
     privateMsg(username, newBuf, index);
+  } else if(strcmp(buf, "/quit\n") && strcmp(buf,"")){
+
+      broadcast(newBuf);
+      //disconnect(index, PARTICIPANT);
   } else {
-    broadcast(newBuf);
+    //broadcast(newBuf);
+    disconnect(index, PARTICIPANT);
   }
 
 }
@@ -308,7 +342,7 @@ int usernameLogic(int index, int type) {
   int validUName;
   int i;
   char* user = "User ";
-  char* hasJoined = " has joined";
+  char* hasJoined = " has joined\n";
   char messageBuf[28];
   memset(messageBuf,0,sizeof(messageBuf));
 
@@ -339,6 +373,7 @@ int usernameLogic(int index, int type) {
           if(userList[i].observerSD == 0) {
               betterSend(sdo[index], &valid, sizeof(char), index, type);
               userList[i].observerSD = sdo[index];
+              broadcast("A new observer has joined\n");
           } else {
               betterSend(sdo[index], &taken, sizeof(char), index, type);
               oStart[index] = time( &oStart[index] );
@@ -711,7 +746,6 @@ int main(int argc, char **argv) {
           } else {
             //negotiate user name
             usernameLogic(activeIndex, PARTICIPANT);
-            //TODO: broadcast username message to all observers
           }
         }
         //else the participant has a username already and it must be some message
