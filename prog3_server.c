@@ -65,9 +65,9 @@ void disconnect(int index, int type) {
     close(sdp[index]);
     sdp[index] = -1;
     userList[index].participantSD = 0;
-    strncat(messageBuf, user, sizeof(messageBuf));
-    strncat(messageBuf, userList[index].username, sizeof(messageBuf));
-    strncat(messageBuf, hasLeft, sizeof(messageBuf));
+    strncat(messageBuf, user, sizeof(messageBuf) - strlen(messageBuf) - 1);
+    strncat(messageBuf, userList[index].username, sizeof(messageBuf) - strlen(messageBuf) - 1);
+    strncat(messageBuf, hasLeft, sizeof(messageBuf) - strlen(messageBuf) - 1);
     if(strcmp(userList[index].username,"") != 0) {
       broadcast(messageBuf);
     }
@@ -223,9 +223,9 @@ void privateMsg(char* username, char* buf, int index) {
     }
   }
   if(!sent) {
-    strncat(newBuf,"Warning: user ", sizeof(newBuf));
-    strncat(newBuf, username, sizeof(newBuf));
-    strncat(newBuf, "doesn't exist...\n", sizeof(newBuf));
+    strncat(newBuf,"Warning: user ", sizeof(newBuf) - strlen(newBuf) - 1);
+    strncat(newBuf, username, sizeof(newBuf) - strlen(newBuf) - 1);
+    strncat(newBuf, "doesn't exist...\n", sizeof(newBuf) - strlen(newBuf) - 1);
     if(userList[index].observerSD != 0) {
       bigSend(userList[index].observerSD, newBuf, strlen(newBuf), index, OBSERVER);
     }
@@ -247,13 +247,13 @@ void msgHandler(int index) {
   for(int i = 0; i < 11-strlen(userList[index].username); i++) {
     newBuf[i+1] = ' ';
   }
-  strncat(newBuf, userList[index].username, sizeof(newBuf));
+  strncat(newBuf, userList[index].username, sizeof(newBuf) - strlen(newBuf) - 1);
   newBuf[12] = ':';
   newBuf[13] = ' ';
 
   bigRecieve(sdp[index], buf, "Message", index, PARTICIPANT);
 
-  strncat(newBuf, buf, sizeof(newBuf));
+  strncat(newBuf, buf, sizeof(newBuf) - strlen(newBuf) - 1);
 
   if(buf[0] == '@') {
     for(int i = 1; i < 12; i++) {
@@ -321,14 +321,15 @@ int validUsername(char* buf) {
     }
 
     if(taken) {
-      return 0;
+      i = 0;
     } else {
-      return 1;
+      i = 1;
     }
 
   } else {
-    return -1;
+    i = -1;
   }
+    return i;
 }
 
 int usernameLogic(int index, int type) {
@@ -356,9 +357,9 @@ int usernameLogic(int index, int type) {
       for (i = 0; i < strlen(buf); i++) {
         userList[index].username[i] = buf[i];
       }
-      strncat(messageBuf, user, sizeof(messageBuf));
-      strncat(messageBuf, buf, sizeof(messageBuf));
-      strncat(messageBuf, hasJoined, sizeof(messageBuf));
+      strncat(messageBuf, user, sizeof(messageBuf) - strlen(messageBuf) - 1);
+      strncat(messageBuf, buf, sizeof(messageBuf) - strlen(messageBuf) - 1);
+      strncat(messageBuf, hasJoined, sizeof(messageBuf) - strlen(messageBuf) - 1);
       broadcast(messageBuf);
     } else if (validUName == FALSE) {
       betterSend(sdp[index], &taken, sizeof(char), index, type);

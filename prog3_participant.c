@@ -91,7 +91,7 @@ int reader(char* buf, uint8_t sec) {
   struct timeval timeout = {sec,0}; //set turn timer
   int n; //return value, if we timed out or not
   FD_ZERO(&set);
-  FD_SET(0,&set);
+  FD_SET(0,&set); //NOLINT
   if(sec != NULL) {
     n = select(1, &set, NULL, NULL, &timeout); //is there anything to read in time
   }
@@ -235,11 +235,10 @@ int main( int argc, char **argv) {
     fprintf(stdout, "Enter a username: ");
     fflush(stdout);
     if(!reader(buf, TIMEOUT)) {
-      strncat(buf, "fakeUsername", sizeof(buf));
+      strncat(buf, "fakeUsername", sizeof(buf) - strlen(buf) - 1);
       buf[strlen(buf)-1] = 0;
-      //wait(1);
       betterSend(sd, buf, strlen(buf));
-      //fprintf(stderr, "\n");
+      fprintf(stderr, "\n");
       close(sd);
       exit(EXIT_SUCCESS);
     }

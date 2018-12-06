@@ -216,8 +216,8 @@ int main( int argc, char **argv) {
 
   fd_set set;
   FD_ZERO(&set);
-  FD_SET(0,&set);
-  FD_SET(sd,&set);
+  FD_SET(0,&set); //NOLINT
+  FD_SET(sd,&set); //NOLINT
 
   char* quit = "/quit";
   int done = FALSE;
@@ -236,11 +236,10 @@ int main( int argc, char **argv) {
     fprintf(stdout, "Enter a username: ");
     fflush(stdout);
     if(!reader(buf, TIMEOUT)) {
-      strncat(buf, "fakeUsername", sizeof(buf));
+      strncat(buf, "fakeUsername", sizeof(buf) - strlen(buf) - 1);
       buf[strlen(buf)-1] = 0;
-      //wait(1);
       betterSend(sd, buf, strlen(buf));
-      //fprintf(stderr, "\n");
+      fprintf(stderr, "\n");
       close(sd);
       exit(EXIT_SUCCESS);
     }
@@ -269,7 +268,7 @@ int main( int argc, char **argv) {
     FD_SET(0,&set);
     FD_SET(sd,&set);
 
-    n = select(sd+1, &set, NULL, NULL, NULL);
+    n = select(sd+1, &set, NULL, NULL, NULL); //NOLINT
 
     if(FD_ISSET(0,&set)) {
       fgets(buf,MAXMSGSIZE,stdin);
