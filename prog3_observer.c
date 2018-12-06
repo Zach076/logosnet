@@ -233,7 +233,7 @@ int main( int argc, char **argv) {
 
   //else server isn't full negotiate username
     while(!done) {
-        fprintf(stderr, "Enter username: ");
+        fprintf(stderr, "Enter a username: ");
         reader(buf, TIMEOUT);
         if(strlen(buf) == 0) {
           strcat(buf, "  ");
