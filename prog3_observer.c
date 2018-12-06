@@ -237,9 +237,9 @@ int main( int argc, char **argv) {
     if(!reader(buf, TIMEOUT)) {
       strncat(buf, "fakeUsername", sizeof(buf));
       buf[strlen(buf)-1] = 0;
-      wait(1);
+      //wait(1);
       betterSend(sd, buf, strlen(buf));
-      fprintf(stderr, "\n");
+      //fprintf(stderr, "\n");
       close(sd);
       exit(EXIT_SUCCESS);
     }
@@ -251,9 +251,9 @@ int main( int argc, char **argv) {
       if(buf[0] == 'Y') {
         done = TRUE;
       } else if(buf[0] == 'T') {
-        fprintf(stderr, "Participant taken, choose another.\n");
+        fprintf(stdout, "Participant taken, choose another.\n");
       } else if(buf[0] == 'N') {
-        fprintf(stderr, "No participants with that username.\n");
+        fprintf(stdout, "No participants with that username.\n");
         close(sd);
         exit(EXIT_SUCCESS);
       }
@@ -278,7 +278,7 @@ int main( int argc, char **argv) {
 
     } else {
       bigRecieve(sd, buf, "Messages");
-      fprintf(stderr, "%s", buf);
+      fprintf(stdout, "%s", buf);
     }
   }
 

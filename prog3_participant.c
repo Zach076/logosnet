@@ -236,9 +236,9 @@ int main( int argc, char **argv) {
     if(!reader(buf, TIMEOUT)) {
       strncat(buf, "fakeUsername", sizeof(buf));
       buf[strlen(buf)-1] = 0;
-      wait(1);
+      //wait(1);
       betterSend(sd, buf, strlen(buf));
-      fprintf(stderr, "\n");
+      //fprintf(stderr, "\n");
       close(sd);
       exit(EXIT_SUCCESS);
     }
