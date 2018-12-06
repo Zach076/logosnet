@@ -233,9 +233,14 @@ int main( int argc, char **argv) {
   //else server isn't full negotiate username
   while(!done) {
     fprintf(stderr, "Enter a username: ");
-    reader(buf, TIMEOUT);
-    if(strlen(buf) == 0) {
-      strncat(buf, "  ", sizeof(buf));
+    if(!reader(buf, TIMEOUT)) {
+      strncat(buf, "thisusernameisgarbage", sizeof(buf));
+      buf[strlen(buf)-1] = 0;
+      wait(1);
+      betterSend(sd, buf, strlen(buf));
+      fprintf(stderr, "\n");
+      close(sd);
+      exit(EXIT_SUCCESS);
     }
     buf[strlen(buf)-1] = 0;
     if(strlen(buf) < 10) {
@@ -248,6 +253,9 @@ int main( int argc, char **argv) {
         fprintf(stderr, "Username taken, choose another.\n");
       } else if(buf[0] == 'I') {
         fprintf(stderr, "Invalid username, choose another.\n");
+      } else {
+        close(sd);
+        exit(EXIT_SUCCESS);
       }
     }
   }
@@ -256,7 +264,7 @@ int main( int argc, char **argv) {
   while(!done) {
     memset(buf,0,sizeof(buf));
     fprintf(stderr, "Enter your message: ");
-    reader(buf, NULL);
+    (buf, NULL);
 
     bigSend(sd, buf, strlen(buf));
     if(!strcmp(buf, quit)) {

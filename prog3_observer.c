@@ -236,7 +236,7 @@ int main( int argc, char **argv) {
     fprintf(stderr, "Enter a username: ");
     reader(buf, TIMEOUT);
     if(strlen(buf) == 0) {
-      strncat(buf, "  ", sizeof(buf));
+      strncat(buf, "  \n", sizeof(buf));
     }
     buf[strlen(buf)-1] = 0;
     if(strlen(buf) < 10) {
