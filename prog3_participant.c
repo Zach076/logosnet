@@ -231,7 +231,7 @@ int main( int argc, char **argv) {
 
   //else server isn't full negotiate username
   while(!done) {
-    fprintf(stderr, "Enter username: ");
+    fprintf(stderr, "Enter a username: ");
     reader(buf, 60);
     buf[strlen(buf)-1] = 0;
     if(strlen(buf) < 10) {
@@ -251,7 +251,7 @@ int main( int argc, char **argv) {
   done = FALSE;
   while(!done) {
     memset(buf,0,sizeof(buf));
-    fprintf(stderr, "Enter Message: ");
+    fprintf(stderr, "Enter your message: ");
     reader(buf, NULL);
 
     bigSend(sd, buf, strlen(buf));
