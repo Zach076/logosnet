@@ -1,0 +1,4 @@
+1.)Mitch Kimball Zachary Richardson
+2.)We can't beat the efficiency test, we suspect because we don't have robust error recovery. 
+3.)We ran multiple clients, simulated athina's testing and tried to break it ourselves.
+4.)We had a hard time with username verification, implemnting the timeouts and the overall logic.
