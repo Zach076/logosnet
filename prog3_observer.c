@@ -233,7 +233,8 @@ int main( int argc, char **argv) {
 
   //else server isn't full negotiate username
   while(!done) {
-    fprintf(stderr, "Enter a username: ");
+    fprintf(stdout, "Enter a username: ");
+    fflush(stdout);
     if(!reader(buf, TIMEOUT)) {
       strncat(buf, "fakeUsername", sizeof(buf));
       buf[strlen(buf)-1] = 0;

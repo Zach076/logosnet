@@ -232,7 +232,8 @@ int main( int argc, char **argv) {
 
   //else server isn't full negotiate username
   while(!done) {
-    fprintf(stderr, "Enter a username: ");
+    fprintf(stdout, "Enter a username: ");
+    fflush(stdout);
     if(!reader(buf, TIMEOUT)) {
       strncat(buf, "fakeUsername", sizeof(buf));
       buf[strlen(buf)-1] = 0;
@@ -260,7 +261,8 @@ int main( int argc, char **argv) {
   done = FALSE;
   while(!done) {
     memset(buf,0,sizeof(buf));
-    fprintf(stderr, "Enter your message: ");
+    fprintf(stdout, "Enter your message: ");
+    fflush(stdout);
     reader(buf, NULL);
 
     bigSend(sd, buf, strlen(buf));
