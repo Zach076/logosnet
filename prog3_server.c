@@ -19,6 +19,8 @@
 #define FALSE 0
 #define PARTICIPANT 1
 #define OBSERVER 0
+#define TIMEOUT 10
+
 int pvisits = 0; /* counts participant's connections */
 int ovisits = 0; /* counts observers's connections */
 int sdp[255]; /* socket descriptors for participants */
@@ -741,7 +743,7 @@ int main(int argc, char **argv) {
         //if not active participant
         if(strcmp(userList[activeIndex].username,"") ==0){
           //check timestamps
-          if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > 10) {
+          if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > TIMEOUT) {
             disconnect(activeIndex, PARTICIPANT);
           } else {
             //negotiate user name
@@ -762,7 +764,7 @@ int main(int argc, char **argv) {
 
         //observer username logic
         //check if observer took to long
-        if(difftime(oEnd[activeIndex],oStart[activeIndex]) > 10) {
+        if(difftime(oEnd[activeIndex],oStart[activeIndex]) > TIMEOUT) {
           disconnect(activeIndex, OBSERVER);
         } else {
           //else we are negotiating a username

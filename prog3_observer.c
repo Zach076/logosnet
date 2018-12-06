@@ -13,6 +13,7 @@
 #define MAXMSGSIZE 1000
 #define TRUE 1
 #define FALSE 0
+#define TIMEOUT 10
 
 //sends data from buf of size len to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
@@ -233,7 +234,10 @@ int main( int argc, char **argv) {
   //else server isn't full negotiate username
     while(!done) {
         fprintf(stderr, "Enter username: ");
-        reader(buf, 60);
+        reader(buf, TIMEOUT);
+        if(strlen(buf) == 0) {
+          strcat(buf, "  ");
+        }
         buf[strlen(buf)-1] = 0;
         if(strlen(buf) < 10) {
             betterSend(sd, buf, strlen(buf));
