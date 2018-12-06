@@ -742,11 +742,16 @@ int main(int argc, char **argv) {
       // if participant
       else if(sdp[activeIndex] == activeSd){
         //if not active participant
+        //TODO: remove debugging prints
+        fprintf(stderr, "sdp[%d] = %d\n", activeIndex, activeSd);
         if(strcmp(userList[activeIndex].username,"") ==0){
           //check timestamps
-          if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) > TIMEOUT) {
+          fprintf(stderr, "userList[%d].username is blank\n", activeIndex);
+          if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) >= TIMEOUT) {
+            fprintf(stderr, "TIMEOUT difftime: %d\n", difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime));
             disconnect(activeIndex, PARTICIPANT);
           } else {
+            fprintf(stderr, "NO TIMEOUT difftime: %d\n", difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime));
             //negotiate user name
             usernameLogic(activeIndex, PARTICIPANT);
           }
