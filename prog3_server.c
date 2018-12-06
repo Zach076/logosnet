@@ -66,9 +66,9 @@ void disconnect(int index, int type) {
     close(sdp[index]);
     sdp[index] = -1;
     userList[index].participantSD = 0;
-    strcat(messageBuf, user);
-    strcat(messageBuf, userList[index].username);
-    strcat(messageBuf, hasLeft);
+    strlcat(messageBuf, user, sizeof(messageBuf));
+    strlcat(messageBuf, userList[index].username, sizeof(messageBuf));
+    strlcat(messageBuf, hasLeft, sizeof(messageBuf));
     if(strcmp(userList[index].username,"") != 0) {
         broadcast(messageBuf);
     }
@@ -224,9 +224,9 @@ void privateMsg(char* username, char* buf, int index) {
     }
   }
   if(!sent) {
-    strcat(newBuf,"Warning: user ");
-    strcat(newBuf, username);
-    strcat(newBuf, "doesn't exist...\n");
+    strlcat(newBuf,"Warning: user ", sizeof(newBuf));
+    strlcat(newBuf, username, sizeof(newBuf));
+    strlcat(newBuf, "doesn't exist...\n", sizeof(newBuf));
     if(userList[index].observerSD != 0) {
       bigSend(userList[index].observerSD, newBuf, strlen(newBuf), index, OBSERVER);
     }
@@ -248,13 +248,13 @@ void msgHandler(int index) {
   for(int i = 0; i < 11-strlen(userList[index].username); i++) {
     newBuf[i+1] = ' ';
   }
-  strcat(newBuf, userList[index].username);
+  strlcat(newBuf, userList[index].username, sizeof(newBuf));
   newBuf[12] = ':';
   newBuf[13] = ' ';
 
   bigRecieve(sdp[index], buf, "Message", index, PARTICIPANT);
 
-  strcat(newBuf, buf);
+  strlcat(newBuf, buf, sizeof(newBuf));
 
   if(buf[0] == '@') {
     for(int i = 1; i < 12; i++) {
@@ -357,9 +357,9 @@ int usernameLogic(int index, int type) {
           for (i = 0; i < strlen(buf); i++) {
               userList[index].username[i] = buf[i];
           }
-          strcat(messageBuf, user);
-          strcat(messageBuf, buf);
-          strcat(messageBuf, hasJoined);
+          strlcat(messageBuf, user, sizeof(messageBuf));
+          strlcat(messageBuf, buf, sizeof(messageBuf));
+          strlcat(messageBuf, hasJoined, sizeof(messageBuf));
           broadcast(messageBuf);
       } else if (validUName == FALSE) {
           betterSend(sdp[index], &taken, sizeof(char), index, type);
@@ -480,7 +480,9 @@ struct node* dequeue(){
   //grab the front of the queue
   struct node * temp = requestqueue.first;
   //if the queue is empty return NULL
-  if(requestqueue.first ==NULL) return NULL;
+  if(requestqueue.first ==NULL) {
+    return NULL;
+  }
   //if there is only one node in queue
   if(requestqueue.first ==requestqueue.last){
     requestqueue.first = NULL;
