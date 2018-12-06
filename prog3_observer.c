@@ -90,7 +90,7 @@ int reader(char* buf, uint8_t sec) {
   struct timeval timeout = {sec,0}; //set turn timer
   int n; //return value, if we timed out or not
   FD_ZERO(&set);
-  FD_SET(0,&set);
+  FD_SET(0,&set);//NOLINT
   n = select(1, &set, NULL, NULL, &timeout); //is there anything to read in time
   if(n == 0){
     //timeout
