@@ -11,7 +11,6 @@
 #include <time.h>
 #include <unistd.h>
 
-
 #define MAXMSGSIZE 1000
 #define QLEN 255 /* size of request queue */
 #define NUMCLIENTS 255
@@ -70,7 +69,7 @@ void disconnect(int index, int type) {
     strncat(messageBuf, userList[index].username, sizeof(messageBuf));
     strncat(messageBuf, hasLeft, sizeof(messageBuf));
     if(strcmp(userList[index].username,"") != 0) {
-        broadcast(messageBuf);
+      broadcast(messageBuf);
     }
     memset(&userList[index].username, 0, sizeof(userList[index].username));
   }
@@ -87,8 +86,8 @@ void disconnect(int index, int type) {
     }
   }
   if(!found) {
-      close(sdo[index]);
-      sdo[index] = -1;
+    close(sdo[index]);
+    sdo[index] = -1;
   }
 
 }
@@ -267,8 +266,8 @@ void msgHandler(int index) {
     privateMsg(username, newBuf, index);
   } else if(strcmp(buf, "/quit\n") && strcmp(buf,"")){
 
-      broadcast(newBuf);
-      //disconnect(index, PARTICIPANT);
+    broadcast(newBuf);
+    //disconnect(index, PARTICIPANT);
   } else {
     //broadcast(newBuf);
     disconnect(index, PARTICIPANT);
@@ -277,17 +276,17 @@ void msgHandler(int index) {
 }
 
 int validObserverUsername(char* buf) {
-    int taken = -1;
-    int i = 0;
+  int taken = -1;
+  int i = 0;
 
-    for(i = 0; i < 256; i++) {
-        if(!strcmp(buf,userList[i].username)) {
-            taken = i;
-            i = 256;
-        }
+  for(i = 0; i < 256; i++) {
+    if(!strcmp(buf,userList[i].username)) {
+      taken = i;
+      i = 256;
     }
+  }
 
-    return taken;
+  return taken;
 }
 
 int validUsername(char* buf) {
@@ -349,41 +348,41 @@ int usernameLogic(int index, int type) {
   memset(messageBuf,0,sizeof(messageBuf));
 
   if(type == PARTICIPANT) {
-      recieve(sdp[index], buf, error, index, type);
-      validUName = validUsername(buf);
+    recieve(sdp[index], buf, error, index, type);
+    validUName = validUsername(buf);
 
-      if (validUName == TRUE) {
-          betterSend(sdp[index], &valid, sizeof(char), index, type);
-          for (i = 0; i < strlen(buf); i++) {
-              userList[index].username[i] = buf[i];
-          }
-          strncat(messageBuf, user, sizeof(messageBuf));
-          strncat(messageBuf, buf, sizeof(messageBuf));
-          strncat(messageBuf, hasJoined, sizeof(messageBuf));
-          broadcast(messageBuf);
-      } else if (validUName == FALSE) {
-          betterSend(sdp[index], &taken, sizeof(char), index, type);
-          userList[index].startTime = time(&userList[index].startTime);
-      } else {
-          betterSend(sdp[index], &invalid, sizeof(char), index, type);
+    if (validUName == TRUE) {
+      betterSend(sdp[index], &valid, sizeof(char), index, type);
+      for (i = 0; i < strlen(buf); i++) {
+        userList[index].username[i] = buf[i];
       }
+      strncat(messageBuf, user, sizeof(messageBuf));
+      strncat(messageBuf, buf, sizeof(messageBuf));
+      strncat(messageBuf, hasJoined, sizeof(messageBuf));
+      broadcast(messageBuf);
+    } else if (validUName == FALSE) {
+      betterSend(sdp[index], &taken, sizeof(char), index, type);
+      userList[index].startTime = time(&userList[index].startTime);
+    } else {
+      betterSend(sdp[index], &invalid, sizeof(char), index, type);
+    }
   } else {
-      recieve(sdo[index], buf, error, index, type);
-      i = validObserverUsername(buf);
+    recieve(sdo[index], buf, error, index, type);
+    i = validObserverUsername(buf);
 
-      if (i >= 0) {
-          if(userList[i].observerSD == 0) {
-              betterSend(sdo[index], &valid, sizeof(char), index, type);
-              userList[i].observerSD = sdo[index];
-              broadcast("A new observer has joined\n");
-          } else {
-              betterSend(sdo[index], &taken, sizeof(char), index, type);
-              oStart[index] = time( &oStart[index] );
-          }
+    if (i >= 0) {
+      if(userList[i].observerSD == 0) {
+        betterSend(sdo[index], &valid, sizeof(char), index, type);
+        userList[i].observerSD = sdo[index];
+        broadcast("A new observer has joined\n");
       } else {
-          betterSend(sdo[index], &discon, sizeof(char), index, type);
-          disconnect(index, type);
+        betterSend(sdo[index], &taken, sizeof(char), index, type);
+        oStart[index] = time( &oStart[index] );
       }
+    } else {
+      betterSend(sdo[index], &discon, sizeof(char), index, type);
+      disconnect(index, type);
+    }
 
   }
 }

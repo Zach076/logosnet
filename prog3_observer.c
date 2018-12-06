@@ -232,28 +232,28 @@ int main( int argc, char **argv) {
   }
 
   //else server isn't full negotiate username
-    while(!done) {
-        fprintf(stdout, "Enter a username: ");
-        reader(buf, TIMEOUT);
-        if(strlen(buf) == 0) {
-          strncat(buf, "  ", sizeof(buf));
-        }
-        buf[strlen(buf)-1] = 0;
-        if(strlen(buf) < 10) {
-            betterSend(sd, buf, strlen(buf));
-            memset(buf, 0, sizeof(buf));
-            recieve(sd, buf, "Username verification");
-            if(buf[0] == 'Y') {
-                done = TRUE;
-            } else if(buf[0] == 'T') {
-                fprintf(stdout, "Participant taken, choose another.\n");
-            } else if(buf[0] == 'N') {
-                fprintf(stdout, "No participants with that username.\n");
-                close(sd);
-                exit(EXIT_SUCCESS);
-            }
-        }
+  while(!done) {
+    fprintf(stderr, "Enter a username: ");
+    reader(buf, TIMEOUT);
+    if(strlen(buf) == 0) {
+      strncat(buf, "  ", sizeof(buf));
     }
+    buf[strlen(buf)-1] = 0;
+    if(strlen(buf) < 10) {
+      betterSend(sd, buf, strlen(buf));
+      memset(buf, 0, sizeof(buf));
+      recieve(sd, buf, "Username verification");
+      if(buf[0] == 'Y') {
+        done = TRUE;
+      } else if(buf[0] == 'T') {
+        fprintf(stderr, "Participant taken, choose another.\n");
+      } else if(buf[0] == 'N') {
+        fprintf(stderr, "No participants with that username.\n");
+        close(sd);
+        exit(EXIT_SUCCESS);
+      }
+    }
+  }
   //now we have a user name read messages
   done = FALSE;
   while(!done) {
@@ -266,14 +266,14 @@ int main( int argc, char **argv) {
     n = select(sd+1, &set, NULL, NULL, NULL);
 
     if(FD_ISSET(0,&set)) {
-        fgets(buf,MAXMSGSIZE,stdin);
-        if(strcmp(buf,quit)){
-            done = TRUE;
-        }
+      fgets(buf,MAXMSGSIZE,stdin);
+      if(strcmp(buf,quit)){
+        done = TRUE;
+      }
 
     } else {
       bigRecieve(sd, buf, "Messages");
-      fprintf(stdout, "%s", buf);
+      fprintf(stderr, "%s", buf);
     }
   }
 

@@ -232,7 +232,7 @@ int main( int argc, char **argv) {
 
   //else server isn't full negotiate username
   while(!done) {
-    fprintf(stdout, "Enter a username: ");
+    fprintf(stderr, "Enter a username: ");
     reader(buf, TIMEOUT);
     if(strlen(buf) == 0) {
       strncat(buf, "  ", sizeof(buf));
@@ -245,9 +245,9 @@ int main( int argc, char **argv) {
       if(buf[0] == 'Y') {
         done = TRUE;
       } else if(buf[0] == 'T') {
-        fprintf(stdout, "Username taken, choose another.\n");
+        fprintf(stderr, "Username taken, choose another.\n");
       } else if(buf[0] == 'I') {
-        fprintf(stdout, "Invalid username, choose another.\n");
+        fprintf(stderr, "Invalid username, choose another.\n");
       }
     }
   }
@@ -255,7 +255,7 @@ int main( int argc, char **argv) {
   done = FALSE;
   while(!done) {
     memset(buf,0,sizeof(buf));
-    fprintf(stdout, "Enter your message: ");
+    fprintf(stderr, "Enter your message: ");
     reader(buf, NULL);
 
     bigSend(sd, buf, strlen(buf));
