@@ -234,9 +234,14 @@ int main( int argc, char **argv) {
   //else server isn't full negotiate username
   while(!done) {
     fprintf(stderr, "Enter a username: ");
-    reader(buf, TIMEOUT);
-    if(strlen(buf) == 0) {
-      strncat(buf, "  \n", sizeof(buf));
+    if(!reader(buf, TIMEOUT)) {
+      strncat(buf, "fakeUsername", sizeof(buf));
+      buf[strlen(buf)-1] = 0;
+      wait(1);
+      betterSend(sd, buf, strlen(buf));
+      fprintf(stderr, "\n");
+      close(sd);
+      exit(EXIT_SUCCESS);
     }
     buf[strlen(buf)-1] = 0;
     if(strlen(buf) < 10) {
