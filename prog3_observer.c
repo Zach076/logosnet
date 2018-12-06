@@ -233,7 +233,7 @@ int main( int argc, char **argv) {
 
   //else server isn't full negotiate username
     while(!done) {
-        fprintf(stderr, "Enter a username: ");
+        fprintf(stdout, "Enter a username: ");
         reader(buf, TIMEOUT);
         if(strlen(buf) == 0) {
           strcat(buf, "  ");
@@ -246,9 +246,9 @@ int main( int argc, char **argv) {
             if(buf[0] == 'Y') {
                 done = TRUE;
             } else if(buf[0] == 'T') {
-                fprintf(stderr, "Participant taken, choose another.\n");
+                fprintf(stdout, "Participant taken, choose another.\n");
             } else if(buf[0] == 'N') {
-                fprintf(stderr, "No participants with that username.\n");
+                fprintf(stdout, "No participants with that username.\n");
                 close(sd);
                 exit(EXIT_SUCCESS);
             }
