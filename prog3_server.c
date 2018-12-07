@@ -20,18 +20,16 @@
 #define OBSERVER 0
 #define TIMEOUT 10
 
-int pvisits = 0; /* counts participant's connections */
-int ovisits = 0; /* counts observers's connections */
 int sdp[255]; /* socket descriptors for participants */
 int sdo[255]; /* socket descriptors for observers */
-time_t oStart[255];
-time_t oEnd[255];
+time_t oStart[255]; //array of times when an observer joins
+time_t oEnd[255]; //array of times when an observer connects after initial connection
 int tempSD; //to send clients an 'N' if all slots are taken
 int lsdp; //listening socket descriptor for participants
 int lsdo; //listening socket descriptor for observers
-fd_set set;
+fd_set set; //set of sockets to listen to
 
-struct userPair{
+struct userPair{ //struct to hold an observer and a participant and relevant information
   int participantSD;
   int observerSD;
   char username[11];
@@ -39,45 +37,58 @@ struct userPair{
   time_t connectTime;
 } userList[255];
 
-struct node{
+struct node{ //node for queues to store a message's socket descriptor index in the global array and the next node in the queue
   int socketDes;
   int socketIndex;
   struct node *nextnode;
 };
 
-struct queue{
+struct queue{ //queue for incoming messages
   struct node *first;
   struct node *last;
 }requestqueue;
 
+//prototype to use in disconnect
 void broadcast(char* buf);
 
+//properly disconnects a client, and its corresponding observer if an active participant
 void disconnect(int index, int type) {
+  //check if observer belongs to a participant
   int found = FALSE;
 
   //if participant, clear the struct username and participantSD
   if(type == PARTICIPANT) {
+    //variables to broadcast disconnect message
     char* user = "User ";
     char* hasLeft = " has left\n";
     char messageBuf[26];
     memset(messageBuf,0,sizeof(messageBuf));
 
+    //close the client sd, set to -1, and reset the userList struct
     close(sdp[index]);
     sdp[index] = -1;
     userList[index].participantSD = 0;
+
+    //create disconnect message
     strncat(messageBuf, user, sizeof(messageBuf) - strlen(messageBuf) - 1);
     strncat(messageBuf, userList[index].username, sizeof(messageBuf) - strlen(messageBuf) - 1);
     strncat(messageBuf, hasLeft, sizeof(messageBuf) - strlen(messageBuf) - 1);
+
+    //if participant is active, send disconnect message
     if(strcmp(userList[index].username,"") != 0) {
       broadcast(messageBuf);
     }
+
+    //clear username
     memset(&userList[index].username, 0, sizeof(userList[index].username));
   }
 
   //if participant, or just observer
   //clear sdo and userList of observerSD
   for(int i = 0; i < NUMCLIENTS; i++) {
+    //if observer is in a pair
     if(userList[index].observerSD == sdo[i]) {
+      //close and remove from pair, reset struct
       close(sdo[i]);
       sdo[i] = -1;
       i = NUMCLIENTS;
@@ -85,21 +96,23 @@ void disconnect(int index, int type) {
       found = TRUE;
     }
   }
+  //if observer is not in a pair
   if(!found) {
+    //close and reset socket descriptor
     close(sdo[index]);
     sdo[index] = -1;
   }
 
 }
 
-//sends data from buf of size len to sd and if theres a fixable error,
+//sends len then buf data to sd and if theres a fixable error,
 //try to send again, otherwise exit nicely
 void betterSend(int sd, void* buf, uint8_t len, int index, int type) {
 
   ssize_t n = -1;
   //while errors occur
   while(n == -1) {
-    //try to send data
+    //try to send length
     n = send(sd, &len, sizeof(uint8_t), 0);
     //if error occured
     if(n == -1) {
@@ -123,14 +136,13 @@ void betterSend(int sd, void* buf, uint8_t len, int index, int type) {
   }
 }
 
+//betterSend but larger length for chat messages
 void bigSend(int sd, void* buf, uint16_t len, int index, int type) {
-
   ssize_t n = -1;
   //while errors occur
   while(n == -1) {
-
     len = htons(len);
-    //try to send data
+    //try to send length
     n = send(sd, &len, sizeof(uint16_t), 0);
     //if error occured
     if(n == -1) {
@@ -142,7 +154,7 @@ void bigSend(int sd, void* buf, uint16_t len, int index, int type) {
   }
   n =-1;
   while(n == -1) {
-    //buf = htons(buf);
+    //reset length to be properly used
     len = ntohs(len);
     //try to send data
     n = send(sd, (char *)buf, len, 0);
@@ -156,6 +168,7 @@ void bigSend(int sd, void* buf, uint16_t len, int index, int type) {
   }
 }
 
+//recieves len then buf data from sd and if it breaks, print error
 void recieve(int sd, void* buf, char* error, int index, int type) {
   ssize_t n;
   uint8_t length;
@@ -167,7 +180,7 @@ void recieve(int sd, void* buf, char* error, int index, int type) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
     disconnect(index, type);
   }
-
+  //recieve data
   n = recv(sd, buf, length, MSG_WAITALL);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
@@ -176,8 +189,8 @@ void recieve(int sd, void* buf, char* error, int index, int type) {
   }
 }
 
+//recieve but larger length for chat messages
 void bigRecieve(int sd, void* buf, char* error, int index, int type) {
-
   ssize_t n;
   uint16_t length;
   //recieve length
@@ -189,9 +202,8 @@ void bigRecieve(int sd, void* buf, char* error, int index, int type) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
     disconnect(index, type);
   }
-
+  //recieve data
   n = recv(sd, buf, length, MSG_WAITALL);
-  //buf = ntohs(buf);
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -199,6 +211,7 @@ void bigRecieve(int sd, void* buf, char* error, int index, int type) {
   }
 }
 
+//broadcast sends messages to all observers currently in the chat room.
 void broadcast(char* buf) {
   for(int i = 0; i < NUMCLIENTS;i++) {
     if(userList[i].observerSD > 0) {
@@ -206,43 +219,51 @@ void broadcast(char* buf) {
     }
   }
 }
-
+//privateMsg is used to handle any private message sent in the chat room
+//username is the destination user, buf stores their message and index is the index of the sender in global array
 void privateMsg(char* username, char* buf, int index) {
+  //flag to determine if user with given username exists
   int sent = FALSE;
-
+  //buffer for user not found message
   char newBuf[41];
   memset(newBuf, 0, sizeof(newBuf));
-
+  //search through the list of users for the given username
   for(int i = 0; i < NUMCLIENTS;i++) {
+    //if we found the username send the private message to their observer.
     if(strcmp(userList[i].username, username) == 0) {
       if(userList[i].observerSD != 0) {
         bigSend(userList[i].observerSD, buf, strlen(buf), index, OBSERVER);
       }
+      //end the loop early because we have found the user
       i = NUMCLIENTS;
       sent = TRUE;
     }
   }
+  //if we didn't find the user then send the does not exist message to user
   if(!sent) {
     strncat(newBuf,"Warning: user ", sizeof(newBuf) - strlen(newBuf) - 1);
     strncat(newBuf, username, sizeof(newBuf) - strlen(newBuf) - 1);
     strncat(newBuf, "doesn't exist...\n", sizeof(newBuf) - strlen(newBuf) - 1);
+    //check if the user has an observer to send message to
     if(userList[index].observerSD != 0) {
       bigSend(userList[index].observerSD, newBuf, strlen(newBuf), index, OBSERVER);
     }
-  } else {
+  } else {//if we found the user then we also send the private message to the observer of the user that sent it
     if(userList[index].observerSD != 0) {
       bigSend(userList[index].observerSD, buf, strlen(buf), index, OBSERVER);
     }
   }
 }
 
+//handles incoming messages
 void msgHandler(int index) {
-  char username[11];
-  char buf[1000];
-  char newBuf[1014];
+  char username[11]; //username buffer
+  char buf[1000]; //message buffer
+  char newBuf[1014]; //message buffer with preppended message
   memset(buf,0,sizeof(buf));
   memset(newBuf,0,sizeof(newBuf));
   memset(username, 0 , sizeof(username));
+  //set preppended message
   newBuf[0] = '>';
   for(int i = 0; i < 11-strlen(userList[index].username); i++) {
     newBuf[i+1] = ' ';
@@ -251,10 +272,13 @@ void msgHandler(int index) {
   newBuf[12] = ':';
   newBuf[13] = ' ';
 
+  //recieve message
   bigRecieve(sdp[index], buf, "Message", index, PARTICIPANT);
 
+  //place message after preppended message
   strncat(newBuf, buf, sizeof(newBuf) - strlen(newBuf) - 1);
 
+  //if private message, loop through the recipient and copy username
   if(buf[0] == '@') {
     for(int i = 1; i < 12; i++) {
       if(buf[i] != ' ') {
@@ -263,124 +287,143 @@ void msgHandler(int index) {
         i = 12;
       }
     }
+    //send private message
     privateMsg(username, newBuf, index);
-  } else if(strcmp(buf, "/quit\n") && strcmp(buf,"")){
-
+  } else if(strcmp(buf, "/quit\n") && strcmp(buf,"")){ //if client typed something other than /quit
+    //broadcast message
     broadcast(newBuf);
-    //disconnect(index, PARTICIPANT);
   } else {
-    //broadcast(newBuf);
+    //else they typed quit and we disconnect
     disconnect(index, PARTICIPANT);
   }
-
 }
 
+//small function to validate incoming usernames from observers
 int validObserverUsername(char* buf) {
   int taken = -1;
   int i = 0;
-
+  //loop through all other usernames to check if taken
   for(i = 0; i < 256; i++) {
     if(!strcmp(buf,userList[i].username)) {
       taken = i;
       i = 256;
     }
   }
-
+  //return the index we found the username
   return taken;
 }
 
+//validates incoming usernames of participants
 int validUsername(char* buf) {
   int taken = FALSE;
   int done = FALSE;
   int i = 0;
   int valid = TRUE;
+  //while reading the username
   while(!done){
-    if(buf[i] > 64 && buf[i] < 91) {
+    if(buf[i] > 64 && buf[i] < 91) { //if were uppercase A-Z
+      i++; //increment
+    } else if (buf[i] > 96 && buf[i] < 123) { //if were lowercase a-z
       i++;
-    } else if (buf[i] > 96 && buf[i] < 123) {
+    } else if(buf[i] > 47 && buf[i] < 58) { // if were numbers
       i++;
-    } else if(buf[i] > 47 && buf[i] < 58) {
+    } else if(buf[i] == 95) { //if were a space
       i++;
-    } else if(buf[i] == 95) {
-      i++;
-    } else if(buf[i] == 0) {
-      done = TRUE;
-    } else {
+    } else if(buf[i] == 0) { //if null terminator
+      done = TRUE; //no increment were done
+    } else { //if invalid character
       valid = FALSE;
       done = TRUE;
     }
   }
 
   if(valid) {
-
+    //loop through usernames to check its not taken
     for(i = 0; i < 256; i++) {
       if(!strcmp(buf,userList[i].username)) {
         taken = TRUE;
         i = 256;
       }
     }
-
+    //if username is taken
     if(taken) {
+      //return 0
       i = 0;
     } else {
+      //if username is available return true
       i = 1;
     }
-
   } else {
+    //if not valid return -1
     i = -1;
   }
-    return i;
+  return i;
 }
 
+//starts negotiation of usernames between server and clients
 int usernameLogic(int index, int type) {
 
-  char buf[11];
+  char buf[11];//username buffer
   memset(buf,0,sizeof(buf));
-  char taken = 'T';
-  char valid = 'Y';
-  char invalid = 'I';
-  char discon = 'N';
-  char* error = "Username";
-  int validUName;
-  int i;
-  char* user = "User ";
+  char taken = 'T';//taken flag sent to client
+  char valid = 'Y';//valid flag sent to client
+  char invalid = 'I';//invalid flag sent to client
+  char discon = 'N';//disconnect flag sent to client
+  char* error = "Username";//error type possible
+  int validUName;//flag for if the username is valid
+  int i;//iterator
+  char* user = "User ";//user has joined string
   char* hasJoined = " has joined\n";
-  char messageBuf[28];
+  char messageBuf[28];//buffer for the has joined message
   memset(messageBuf,0,sizeof(messageBuf));
 
+  //if PARTICIPANT
   if(type == PARTICIPANT) {
+    //recieve username and validate it
     recieve(sdp[index], buf, error, index, type);
     validUName = validUsername(buf);
-
+    //if username is valid
     if (validUName == TRUE) {
+      //send valid flag and add username to active user list
       betterSend(sdp[index], &valid, sizeof(char), index, type);
       for (i = 0; i < strlen(buf); i++) {
         userList[index].username[i] = buf[i];
       }
+      //set has joined message
       strncat(messageBuf, user, sizeof(messageBuf) - strlen(messageBuf) - 1);
       strncat(messageBuf, buf, sizeof(messageBuf) - strlen(messageBuf) - 1);
       strncat(messageBuf, hasJoined, sizeof(messageBuf) - strlen(messageBuf) - 1);
+      //broadcast has joined message
       broadcast(messageBuf);
-    } else if (validUName == FALSE) {
+    } else if (validUName == FALSE) { //if username is taken
+      //send taken flag and reset username timeout
       betterSend(sdp[index], &taken, sizeof(char), index, type);
       userList[index].startTime = time(&userList[index].startTime);
-    } else {
+    } else { //if username is invalid
+      //send invalid flag
       betterSend(sdp[index], &invalid, sizeof(char), index, type);
     }
-  } else {
+  } else { //if we're an observer
+    //recieve username check validity
     recieve(sdo[index], buf, error, index, type);
     i = validObserverUsername(buf);
 
+    //if username is valid
     if (i >= 0) {
-      if(userList[i].observerSD == 0) {
+      if(userList[i].observerSD == 0) { //if username isnt taken
+        //send valid flag
         betterSend(sdo[index], &valid, sizeof(char), index, type);
+        //give observer its pair
         userList[i].observerSD = sdo[index];
+        //broadcast an observer has joined
         broadcast("A new observer has joined\n");
-      } else {
+      } else { //if username is taken
+        //send taken flag and reset username timeout
         betterSend(sdo[index], &taken, sizeof(char), index, type);
         oStart[index] = time( &oStart[index] );
       }
-    } else {
+    } else { //if invalid
+      //send invalid flag and disconnect
       betterSend(sdo[index], &discon, sizeof(char), index, type);
       disconnect(index, type);
     }
@@ -388,9 +431,10 @@ int usernameLogic(int index, int type) {
   }
 }
 
+//handles incoming connections
 void acceptHandler(struct sockaddr_in cad, int type) {
-  char valid = 'Y';
-  char invalid = 'N';
+  char valid = 'Y'; //vacancy flag
+  char invalid = 'N'; //no vacancy flag
   int alen = sizeof(cad);
   int index = -1;
   // loop to find empty index in participants array
@@ -422,6 +466,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         //give pair
         userList[index].participantSD = sdp[index];
         memset(userList[index].username,0,sizeof(userList[index].username));
+        //set username timeout start time
         userList[index].startTime = time( &userList[index].startTime );
 
       }
@@ -433,10 +478,9 @@ void acceptHandler(struct sockaddr_in cad, int type) {
         fprintf(stderr, "Error: Accept failed\n");
         sdo[index] =-1;
       } else {
-        //send char 'Y' and ask for username
+        //send char 'Y' and start timer to wait for username
         betterSend(sdo[index], &valid, 1, index, type);
         oStart[index] = time ( &oStart[index] );
-        //username logic later
       }
     }
   }
@@ -446,7 +490,7 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       fprintf(stderr, "Error: Accept failed\n");
       tempSD =-1;
     } else {
-      //send char 'N'
+      //send char 'N' and disconnect
       betterSend(tempSD, &invalid, 1, index, type);
       close(tempSD);
     }
@@ -457,15 +501,18 @@ void acceptHandler(struct sockaddr_in cad, int type) {
       fprintf(stderr, "Error: Accept failed\n");
       tempSD =-1;
     } else {
-      //send char 'N'
+      //send char 'N' and disconnect
       betterSend(tempSD, &invalid, 1, index, type);
       close(tempSD);
     }
   }
 }
 
+//place node into our select ready queue
 void enqueue(struct node* newnode){
+  //if newnode is the first node in the queue
   if(requestqueue.first == NULL && requestqueue.last ==NULL){
+    //sets first and last pointer to be this node since queue size is 1
     requestqueue.first = newnode;
     requestqueue.last = newnode;
   }
@@ -476,6 +523,7 @@ void enqueue(struct node* newnode){
   }
 }
 
+//Pop next select node from our select ready queue
 struct node* dequeue(){
   //grab the front of the queue
   struct node * temp = requestqueue.first;
@@ -492,23 +540,13 @@ struct node* dequeue(){
   else{
     requestqueue.first = requestqueue.first->nextnode;
   }
-
   return temp;
-
 }
 
+//search the fd set for any socket descriptors that are ready for handling
 void findReadySockets(int n){
-
-  /*go through set
-  * for each item in set
-  * check if is_set
-  *  add to queue
-  * else
-  *  move to next item
-  *
-  * */
-  int i;
-  int numfound = 0;
+  int i;//iterator
+  int numfound = 0;//count of ready socket descriptors
 
   //check if listen participant sd is ready
   if(FD_ISSET(lsdp, &set)){
@@ -536,6 +574,7 @@ void findReadySockets(int n){
       struct node *temp = (struct node *)malloc(sizeof(struct node));
       temp ->socketDes = sdp[i];
       temp->socketIndex = i;
+      //set connection time for participant
       userList[i].connectTime = time( &userList[i].connectTime );
       enqueue(temp);
     }
@@ -545,40 +584,45 @@ void findReadySockets(int n){
       struct node *temp = (struct node *)malloc(sizeof(struct node));
       temp ->socketDes = sdo[i];
       temp->socketIndex = i;
+      //set connection time for observers
       oEnd[i] = time( &oEnd[i] );
       enqueue(temp);
     }
   }
 }
 
+//function to remake fd set to listen to, returns max socket descriptor
 int makeSet() {
-  int i;
-  int maxSD = 0;
-  FD_ZERO(&set);
-  FD_SET(lsdp,&set);
-  FD_SET(lsdo,&set);
+  int i; //iterator variable
+  int maxSD = 0; //variable to hold return value
+  FD_ZERO(&set); //clear the set
+  FD_SET(lsdp,&set); //add listening socket
+  FD_SET(lsdo,&set); //add listening socket
+  //for each client, place into the set
   for(i = 0; i < 256; i++) {
     if(sdp[i] > 0) {
-
       FD_SET(sdp[i],&set);
+      //if new max socket descriptor
       if(sdp[i] > maxSD) {
         maxSD = sdp[i];
       }
     }
     if(sdo[i] > 0) {
       FD_SET(sdo[i],&set);
+      //if new max socket descriptor
       if(sdo[i] > maxSD) {
         maxSD = sdo[i];
       }
     }
   }
+  //if new max socket descriptor
   if(lsdp > maxSD) {
     maxSD = lsdp;
   }
+  //if new max socket descriptor
   if(lsdo > maxSD) {
     maxSD = lsdo;
   }
-
   return maxSD;
 }
 
@@ -715,16 +759,15 @@ int main(int argc, char **argv) {
 
 
   int n; //return value, if we timed out or not
-  int maxSD = 0;
+  int maxSD = 0; //max socket descriptor to be used in select
   /* Main server loop - accept and handle requests */
   while (1) {
-
+    //make new set and set maxSD
     maxSD = makeSet();
 
-    n =  select(maxSD+1,&set,NULL,NULL,NULL); //is there anything to read in time
+    n =  select(maxSD+1,&set,NULL,NULL,NULL); //is there anything to read
 
     //iterate and find n sd's put in queue grab from queue
-
     findReadySockets(n);
 
     //loop until queue is empty
@@ -742,39 +785,30 @@ int main(int argc, char **argv) {
       }
       // if participant
       else if(sdp[activeIndex] == activeSd){
-        //if not active participant
+        //if not active participant (no username)
         if(strcmp(userList[activeIndex].username,"") ==0){
-          //check timestamps
+          //check timestamps, if timed out disconnect
           if(difftime(userList[activeIndex].connectTime,userList[activeIndex].startTime) >= TIMEOUT) {
             disconnect(activeIndex, PARTICIPANT);
           } else {
             //negotiate user name
             usernameLogic(activeIndex, PARTICIPANT);
           }
-        }
-        //else the participant has a username already and it must be some message
-        else{
-          //check if disconnected in recieve
-          //recieve message from active participant
-          //broadcast to all observers
+        } else { //else the participant has a username already and it must be some message
+          //handle message
           msgHandler(activeIndex);
         }
-      }
-
-      //if observer is ready for something
-      else if (sdo[activeIndex] == activeSd){
-
-        //observer username logic
-        //check if observer took to long
+      } else if (sdo[activeIndex] == activeSd){ //if observer is ready for something
+        //check timestamps, if timed out disconnect
         if(difftime(oEnd[activeIndex],oStart[activeIndex]) > TIMEOUT) {
           disconnect(activeIndex, OBSERVER);
         } else {
-          //else we are negotiating a username
+          //else we are clear to negotiate a username
           usernameLogic(activeIndex, OBSERVER);
         }
       }
     }
   }
-  //shouldn't get here but ok
-  exit(EXIT_SUCCESS);
+  //somehow exited infinite loop, crash server
+  exit(EXIT_FAILURE);
 }
