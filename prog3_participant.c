@@ -48,7 +48,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
     }
   }
 }
-
+//used to send longer chat messages
 void bigSend(int sd, void* buf, uint16_t len) {
 
   ssize_t n = -1;
@@ -92,11 +92,12 @@ int reader(char* buf, uint8_t sec) {
   int n; //return value, if we timed out or not
   FD_ZERO(&set);
   FD_SET(0,&set); //NOLINT
+  //if there is a timeout associated with this message
   if(sec != NULL) {
     n = select(1, &set, NULL, NULL, &timeout); //is there anything to read in time
   }
   else{
-    n = select(1, &set, NULL, NULL, NULL); //is there anything to read in time
+    n = select(1, &set, NULL, NULL, NULL); //is there any chat message to read
   }
   if(n == 0){
     //timeout
@@ -112,12 +113,12 @@ int reader(char* buf, uint8_t sec) {
   return n;
 }
 
-//recieves data drom a send, storing the data of length len to buf
+//recieves data from a send, storing the data of length len to buf
 //prints error if recieve fails
 void recieve(int sd, void* buf, char* error) {
 
   ssize_t n;
-  uint8_t length;
+  uint8_t length;//message length
   //recieve length
   n = recv(sd, &length, sizeof(uint8_t), MSG_WAITALL);
   //if recieved incorrectly print error, disconnect both clients, and exit
@@ -135,11 +136,11 @@ void recieve(int sd, void* buf, char* error) {
     exit(EXIT_SUCCESS);
   }
 }
-
+//recieve data of a larger message than recieve can handle
 void bigRecieve(int sd, void* buf, char* error) {
 
   ssize_t n;
-  uint16_t length;
+  uint16_t length;//message length
   //recieve length
   n = recv(sd, &length, sizeof(uint16_t), MSG_WAITALL);
   length = ntohs(length);
@@ -149,9 +150,9 @@ void bigRecieve(int sd, void* buf, char* error) {
     close(sd);
     exit(EXIT_SUCCESS);
   }
-
+  //recieve the message
   n = recv(sd, buf, length, MSG_WAITALL);
-  //buf = ntohs(buf);
+
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -221,32 +222,41 @@ int main( int argc, char **argv) {
   char* quit = "/quit\n";
   int done = FALSE;
   //buffer for username and sending messages
-
   memset(buf, 0, sizeof(buf));
+  //recieve server response to connection request
   recieve(sd,buf,"Connection char");
   //if server is full
   if(buf[0] == 'N'){
+    //close and exit
     close(sd);
     exit(EXIT_FAILURE);
   }
 
   //else server isn't full negotiate username
   while(!done) {
+    //prompt user
     fprintf(stdout, "Enter a username: ");
     fflush(stdout);
+    //if they timed out send a psudo username that will be rejected
     if(!reader(buf, TIMEOUT)) {
+
       strncat(buf, "fakeUsername", sizeof(buf) - strlen(buf) - 1);
       buf[strlen(buf)-1] = 0;
+      //tell server to disconnect us
       betterSend(sd, buf, strlen(buf));
+      //close client
       fprintf(stderr, "\n");
       close(sd);
       exit(EXIT_SUCCESS);
     }
+    //null terminate buffer
     buf[strlen(buf)-1] = 0;
+    //if username is in desired length
     if(strlen(buf) < 10) {
       betterSend(sd, buf, strlen(buf));
       memset(buf, 0, sizeof(buf));
       recieve(sd, buf, "Username verification");
+      //if the flag is the valid flag
       if(buf[0] == 'Y') {
         done = TRUE;
       } else if(buf[0] == 'T') {
@@ -256,22 +266,25 @@ int main( int argc, char **argv) {
       }
     }
   }
-  //now we have a user name write messages
+
+  //now we have a user name write messages to server
   done = FALSE;
   while(!done) {
+    //reset buffer
     memset(buf,0,sizeof(buf));
+    //prompt user
     fprintf(stdout, "Enter your message: ");
     fflush(stdout);
     reader(buf, NULL);
 
     bigSend(sd, buf, strlen(buf));
+    //we are done if user types /quit
     if(!strcmp(buf, quit)) {
       done = TRUE;
     }
   }
 
-  //in case real bad things happen still close the socket and exit nicely
+  //still close the socket and exit nicely
   close(sd);
-
   exit(EXIT_SUCCESS);
 }

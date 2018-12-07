@@ -48,7 +48,7 @@ void betterSend(int sd, void* buf, uint8_t len) {
     }
   }
 }
-
+//send a larger message than what betterSend can handle
 void bigSend(int sd, void* buf, uint16_t len) {
 
   ssize_t n = -1;
@@ -86,11 +86,13 @@ void bigSend(int sd, void* buf, uint16_t len) {
 //reads from stdin within a certain time frame,
 //returning if the timeout was reached or not
 int reader(char* buf, uint8_t sec) {
-  fd_set set;
-  struct timeval timeout = {sec,0}; //set turn timer
+  fd_set set;//set of fd's to listen for
+  struct timeval timeout = {sec,0}; //set timout if any
   int n; //return value, if we timed out or not
+
   FD_ZERO(&set);
   FD_SET(0,&set); //NOLINT
+
   n = select(1, &set, NULL, NULL, &timeout); //is there anything to read in time
   if(n == 0){
     //timeout
@@ -110,8 +112,8 @@ int reader(char* buf, uint8_t sec) {
 //prints error if recieve fails
 void recieve(int sd, void* buf, char* error) {
 
-  ssize_t n;
-  uint8_t length;
+  ssize_t n;//number of bytes read
+  uint8_t length;//length of incoming message
   //recieve length
   memset(buf,0,sizeof(buf));
   n = recv(sd, &length, sizeof(uint8_t), MSG_WAITALL);
@@ -121,8 +123,9 @@ void recieve(int sd, void* buf, char* error) {
     close(sd);
     exit(EXIT_SUCCESS);
   }
-
+  //recieve message from server
   n = recv(sd, buf, length, MSG_WAITALL);
+
   //if recieved incorrectly print error, disconnect both clients, and exit
   if (n != length) {
     fprintf(stderr,"Read Error: %s not read properly from sd: %d\n", error, sd);
@@ -130,11 +133,11 @@ void recieve(int sd, void* buf, char* error) {
     exit(EXIT_SUCCESS);
   }
 }
-
+//recieve function to handle messages greater than 1 byte in length
 void bigRecieve(int sd, void* buf, char* error) {
 
-  ssize_t n;
-  uint16_t length;
+  ssize_t n;//number of bytes read
+  uint16_t length;//length of incoming messages
   //recieve length
   memset(buf,0,sizeof(buf));
   n = recv(sd, &length, sizeof(uint16_t), MSG_WAITALL);
@@ -213,7 +216,7 @@ int main( int argc, char **argv) {
     fprintf(stderr,"connect failed\n");
     exit(EXIT_FAILURE);
   }
-
+  //mkae the fd set we are going to wait on
   fd_set set;
   FD_ZERO(&set);
   FD_SET(0,&set); //NOLINT
@@ -221,9 +224,10 @@ int main( int argc, char **argv) {
 
   char* quit = "/quit";
   int done = FALSE;
-  //buffer for username and sending messages
 
+  //buffer for username and sending messages
   memset(buf, 0, sizeof(buf));
+  //get reply from server about connection request
   recieve(sd,buf,"Connection char");
   //if server is full
   if(buf[0] == 'N'){
@@ -233,21 +237,32 @@ int main( int argc, char **argv) {
 
   //else server isn't full negotiate username
   while(!done) {
+    //prompt user
     fprintf(stdout, "Enter a username: ");
     fflush(stdout);
+    //if they time out send a psudo username that will be dropped by server
     if(!reader(buf, TIMEOUT)) {
+      //make the fake user message
       strncat(buf, "fakeUsername", sizeof(buf) - strlen(buf) - 1);
       buf[strlen(buf)-1] = 0;
+      //send message to server which will disconnect us
       betterSend(sd, buf, strlen(buf));
+      //close out and exit
       fprintf(stderr, "\n");
       close(sd);
       exit(EXIT_SUCCESS);
     }
+    //empty buffer
     buf[strlen(buf)-1] = 0;
+    //if username is valid length
     if(strlen(buf) < 10) {
+      //send username
       betterSend(sd, buf, strlen(buf));
+      //empty buffer
       memset(buf, 0, sizeof(buf));
+      //recive verification char
       recieve(sd, buf, "Username verification");
+      //if username is valid we are done checking the char
       if(buf[0] == 'Y') {
         done = TRUE;
       } else if(buf[0] == 'T') {
@@ -261,29 +276,32 @@ int main( int argc, char **argv) {
   }
   //now we have a user name read messages
   done = FALSE;
+  //loop until user quits or disconnects
   while(!done) {
+    //empty buffer
     memset(buf,0,sizeof(buf));
-
+    //remake the fd_set
     FD_ZERO(&set);
     FD_SET(0,&set);
     FD_SET(sd,&set);
 
+    //wait for messages or user to type
     n = select(sd+1, &set, NULL, NULL, NULL); //NOLINT
 
+    //if user typed /quit then disconnect and exit
     if(FD_ISSET(0,&set)) {
       fgets(buf,MAXMSGSIZE,stdin);
       if(strcmp(buf,quit)){
         done = TRUE;
       }
-
+      //else message must be from the server
     } else {
       bigRecieve(sd, buf, "Messages");
       fprintf(stdout, "%s", buf);
     }
   }
 
-  //in case real bad things happen still close the socket and exit nicely
+  // close the socket and exit nicely
   close(sd);
-
   exit(EXIT_SUCCESS);
 }
